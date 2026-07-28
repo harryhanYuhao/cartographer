@@ -12,9 +12,8 @@
 //! Figure 4: no simplicial reduction, no neighbor-only branching, no
 //! isomorphism pruning, no edge addition.
 
+use crate::algorithm::{minfill, mmw};
 use crate::graph::Graph;
-use crate::minfill::min_fill;
-use crate::mmw::minor_min_width;
 use petgraph::graph::NodeIndex;
 
 /// Result of the QuickBB treewidth search.
@@ -46,8 +45,8 @@ pub fn treewidth(g: &Graph) -> BbResult {
         };
     }
 
-    let (ub, ub_order) = min_fill(g);
-    let lb = minor_min_width(g);
+    let (ub, ub_order) = minfill::min_fill(g);
+    let lb = mmw::minor_min_width(g);
 
     if lb == ub {
         return BbResult {
@@ -95,7 +94,7 @@ fn bb(g: &Graph, g_s: usize, path: &mut Vec<NodeIndex>, best: &mut (usize, Vec<N
         let mut gc = g.clone();
         gc.elim(v);
 
-        let h = minor_min_width(&gc);
+        let h = mmw::minor_min_width(&gc);
         let f = g_child.max(h);
 
         // Prune: only descend if f < ub.
@@ -209,7 +208,7 @@ mod tests {
         // For a non-trivial graph, MMW <= actual treewidth.
         let g = grid3x3();
         let r = treewidth(&g);
-        let lb = minor_min_width(&g);
+        let lb = mmw::minor_min_width(&g);
         assert!(lb <= r.treewidth);
     }
 

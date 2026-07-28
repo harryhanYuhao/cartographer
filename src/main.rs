@@ -1,7 +1,8 @@
 //! QuickBB CLI.
 //!
 //! Reads an undirected graph as an edge list from stdin (or a file given as the
-//! first argument) and prints the treewidth plus a witness elimination ordering.
+//! first argument) and prints the treewidth plus a witness elimination
+//! ordering.
 //!
 //! # Input format
 //!
@@ -23,8 +24,8 @@
 use std::io::{self, Read};
 use std::process::ExitCode;
 
-use quickbb::graph::Graph;
-use quickbb::treewidth;
+use cartographer::graph::Graph;
+use cartographer::treewidth;
 
 fn main() -> ExitCode {
     let raw = match read_input() {
