@@ -43,5 +43,7 @@ pub mod algorithm;
 pub mod generator;
 pub mod graph;
 
-pub use algorithm::{treewidth, BbResult};
+mod cli;
+
+pub use algorithm::{BbResult, treewidth};
 pub use graph::Graph;

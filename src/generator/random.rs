@@ -19,8 +19,8 @@
 
 use crate::graph::Graph;
 use petgraph::graph::NodeIndex;
-use rand::seq::SliceRandom;
 use rand::Rng;
+use rand::seq::SliceRandom;
 
 /// Make `n` isolated vertices in a fresh graph. Used internally so that
 /// vertex indices are always `0..n` regardless of the edges we add later.
@@ -245,8 +245,8 @@ pub fn random_graph(n: usize, rng: &mut impl Rng) -> Graph {
 mod tests {
     use super::*;
     use crate::algorithm::minor_min_width;
-    use rand::rngs::StdRng;
     use rand::SeedableRng;
+    use rand::rngs::StdRng;
 
     fn seeded() -> StdRng {
         StdRng::seed_from_u64(0xC0FFEE)

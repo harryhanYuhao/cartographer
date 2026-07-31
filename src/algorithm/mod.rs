@@ -21,8 +21,9 @@
 //! ```
 
 pub mod branchbound;
+pub mod local_comp;
 pub mod minfill;
-pub mod mmw;
+pub mod mmw; // local complementaiton
 
 pub use branchbound::{BbResult, treewidth};
 pub use minfill::min_fill;
