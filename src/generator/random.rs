@@ -46,6 +46,10 @@ pub fn gnp(n: usize, p: f64, rng: &mut impl Rng) -> Graph {
     g
 }
 
+pub fn gnp_n(n: usize, p: f64) -> Graph {
+    gnp(n, p, &mut rand::rng())
+}
+
 /// **Erdős–Rényi G(n, m).** Construct a graph on `n` vertices with exactly
 /// `m` distinct edges chosen uniformly at random from all `C(n, 2)` possible
 /// edges.

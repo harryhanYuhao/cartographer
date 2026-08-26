@@ -107,9 +107,8 @@ pub fn empty(n: usize) -> Graph {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::algorithm::treewidth;
+    use crate::algorithm::bb;
     use petgraph::graph::NodeIndex;
-
 
     #[test]
     fn path_counts_and_tw() {
@@ -118,7 +117,7 @@ mod tests {
         assert_eq!(g.alive_count(), 5);
         assert!(g.has_edge(NodeIndex::new(0), NodeIndex::new(1)));
         assert!(!g.has_edge(NodeIndex::new(0), NodeIndex::new(2)));
-        assert_eq!(treewidth(&g).treewidth, 1);
+        assert_eq!(bb(&g).treewidth, 1);
     }
 
     #[test]
@@ -133,7 +132,7 @@ mod tests {
         let g = cycle(5);
         assert_eq!(g.node_count(), 5);
         assert!(g.has_edge(NodeIndex::new(4), NodeIndex::new(0)));
-        assert_eq!(treewidth(&g).treewidth, 2);
+        assert_eq!(bb(&g).treewidth, 2);
     }
 
     #[test]
@@ -145,21 +144,21 @@ mod tests {
                 assert!(g.has_edge(NodeIndex::new(u), NodeIndex::new(v)));
             }
         }
-        assert_eq!(treewidth(&g).treewidth, 3);
+        assert_eq!(bb(&g).treewidth, 3);
     }
 
     #[test]
     fn star_tw_one() {
         let g = star(6);
         assert_eq!(g.node_count(), 6);
-        assert_eq!(treewidth(&g).treewidth, 1);
+        assert_eq!(bb(&g).treewidth, 1);
     }
 
     #[test]
     fn grid_3x3_tw_three() {
         let g = grid(3, 3);
         assert_eq!(g.node_count(), 9);
-        assert_eq!(treewidth(&g).treewidth, 3);
+        assert_eq!(bb(&g).treewidth, 3);
     }
 
     #[test]
@@ -167,7 +166,7 @@ mod tests {
         // depth 3 -> 15 vertices
         let g = complete_binary_tree(3);
         assert_eq!(g.node_count(), 15);
-        assert_eq!(treewidth(&g).treewidth, 1);
+        assert_eq!(bb(&g).treewidth, 1);
     }
 
     #[test]

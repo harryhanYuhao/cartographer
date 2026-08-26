@@ -22,8 +22,8 @@
 use std::io::{self, Read};
 use std::process::ExitCode;
 
+use crate::bb;
 use crate::graph::Graph;
-use crate::treewidth;
 
 fn stdin_compute_tw() -> ExitCode {
     let raw = match read_input() {
@@ -48,7 +48,7 @@ fn stdin_compute_tw() -> ExitCode {
     }
 
     let g = Graph::from_edges(edges.iter().copied());
-    let result = treewidth(&g);
+    let result = bb(&g);
 
     println!("treewidth = {}", result.treewidth);
     println!("optimal   = {}", result.optimal);
