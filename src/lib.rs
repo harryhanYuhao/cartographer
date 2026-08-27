@@ -22,7 +22,8 @@
 //!   ([`min_fill`][algorithm::min_fill], [`minor_min_width`][algorithm::mmw]).
 //! - [`generator`] — named graphs ([`path`][generator::named::path],
 //!   [`cycle`][generator::named::cycle], [`clique`][generator::named::clique],
-//!   …) and random graph models
+//!   [`petersen`][generator::small::petersen], [`wheel`][generator::named::wheel],
+//!   [`hypercube`][generator::named::hypercube], …) and random graph models
 //!   ([`gnp`][generator::random::gnp], [`gnm`][generator::random::gnm],
 //!   [`random_regular`][generator::random::random_regular],
 //!   [`barabasi_albert`][generator::random::barabasi_albert],
@@ -46,8 +47,9 @@
 pub mod algorithm;
 pub mod generator;
 pub mod graph;
+pub mod io;
 
 mod cli;
 
 pub use algorithm::{BbResult, bb, bb_tw, pidd_tw};
-pub use graph::{Color, Graph};
+pub use graph::{Graph, VColor};

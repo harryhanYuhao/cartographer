@@ -14,7 +14,7 @@ use petgraph::graph::NodeIndex;
 /// vertices that are referenced by some edge, so edge-less requests (e.g.
 /// `path(1)`, `complete_binary_tree(0)`) would otherwise come back with zero
 /// vertices.
-fn build_with_n_vertices(n: usize, edges: impl IntoIterator<Item = (usize, usize)>) -> Graph {
+pub(crate) fn build_with_n_vertices(n: usize, edges: impl IntoIterator<Item = (usize, usize)>) -> Graph {
     let mut g = Graph::with_capacity(n);
     for (u, v) in edges {
         if u != v {
@@ -104,6 +104,98 @@ pub fn empty(n: usize) -> Graph {
     Graph::with_capacity(n)
 }
 
+/// The complete bipartite graph `K_{a,b}`: vertices `0..a` in the left
+/// part, vertices `a..a+b` in the right part, and every possible edge
+/// between the two parts. Treewidth `min(a, b)` when both parts are
+/// non-empty; with one part empty the graph is just isolated vertices.
+pub fn complete_bipartite(a: usize, b: usize) -> Graph {
+    let mut edges = Vec::new();
+    for i in 0..a {
+        for j in 0..b {
+            edges.push((i, a + j));
+        }
+    }
+    build_with_n_vertices(a + b, edges)
+}
+
+/// The wheel graph `W_n`: a cycle on rim vertices `0..n` with a hub vertex
+/// `n` adjacent to every rim vertex. `n == 3` is `K_4`; for smaller `n`
+/// the rim cycle is dropped and only the spokes remain (a star). Treewidth
+/// 3 for `n >= 4`.
+pub fn wheel(n: usize) -> Graph {
+    let mut edges: Vec<(usize, usize)> = (0..n).map(|i| (i, n)).collect();
+    if n >= 3 {
+        for i in 0..n {
+            edges.push((i, (i + 1) % n));
+        }
+    }
+    build_with_n_vertices(n + 1, edges)
+}
+
+/// The `d`-dimensional hypercube graph `Q_d`: `2^d` vertices indexed by
+/// the `d`-bit numbers, with an edge between vertices whose labels differ
+/// in exactly one bit. `Q_0` is a single vertex; `Q_3` (the cube, 8
+/// vertices) has treewidth 3. For `d` so large that `2^d` would overflow
+/// `usize`, an empty graph is returned.
+pub fn hypercube(d: usize) -> Graph {
+    let n = 1usize.checked_shl(d as u32).unwrap_or(0);
+    let mut edges = Vec::new();
+    for u in 0..n {
+        for v in (u + 1)..n {
+            if (u ^ v).is_power_of_two() {
+                edges.push((u, v));
+            }
+        }
+    }
+    build_with_n_vertices(n, edges)
+}
+
+/// The Möbius ladder `M_n` on `2n` vertices: a cycle `0..2n` with a chord
+/// `{i, i+n}` for each `0 <= i < n`. Requires `n >= 3`; smaller `n` yields
+/// the bare cycle. The graph is 3-regular. `M_3` is the triangular prism
+/// (treewidth 3) and `M_4` is the Wagner graph (treewidth 4).
+pub fn mobius_ladder(n: usize) -> Graph {
+    let mut edges: Vec<(usize, usize)> = (0..2 * n).map(|i| (i, (i + 1) % (2 * n))).collect();
+    if n >= 3 {
+        for i in 0..n {
+            edges.push((i, i + n));
+        }
+    }
+    build_with_n_vertices(2 * n, edges)
+}
+
+/// The `n`-prism graph `Y_n = C_n □ K_2` on `2n` vertices: an outer cycle
+/// on `0..n`, an inner cycle on `n..2n`, and rung edges `{i, n+i}`. The
+/// triangular prism (`n = 3`, 6 vertices) and the cube (`n = 4`, 8
+/// vertices) have treewidth 3; the pentagonal prism (`n = 5`, 10 vertices)
+/// has treewidth 4 (it is one of the four minor-minimal graphs of
+/// treewidth 4). Requires `n >= 3`; smaller `n` yields just the rungs.
+pub fn prism(n: usize) -> Graph {
+    let n2 = 2 * n;
+    let mut edges: Vec<(usize, usize)> = (0..n).map(|i| (i, n + i)).collect();
+    if n >= 3 {
+        for i in 0..n {
+            edges.push((i, (i + 1) % n));
+            edges.push((n + i, n + (i + 1) % n));
+        }
+    }
+    build_with_n_vertices(n2, edges)
+}
+
+/// The friendship (windmill) graph `F_n`: `n` triangles sharing the single
+/// common vertex `0`, for `2n + 1` vertices in total. Treewidth 2 for
+/// `n >= 1`; `F_0` is a single isolated vertex.
+pub fn friendship(n: usize) -> Graph {
+    let mut edges = Vec::new();
+    for k in 0..n {
+        let a = 2 * k + 1;
+        let b = 2 * k + 2;
+        edges.push((0, a));
+        edges.push((0, b));
+        edges.push((a, b));
+    }
+    build_with_n_vertices(2 * n + 1, edges)
+}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -181,5 +273,104 @@ mod tests {
         let g = empty(4);
         assert_eq!(g.node_count(), 4);
         assert_eq!(g.alive_count(), 4);
+    }
+
+    #[test]
+    fn complete_bipartite_k33() {
+        let g = complete_bipartite(3, 3);
+        assert_eq!(g.node_count(), 6);
+        assert_eq!(g.edge_count(), 9);
+        for i in 0..3 {
+            for j in 0..3 {
+                assert!(g.has_edge(NodeIndex::new(i), NodeIndex::new(3 + j)));
+            }
+            assert!(!g.has_edge(NodeIndex::new(i), NodeIndex::new((i + 1) % 3)));
+        }
+        assert_eq!(bb(&g).treewidth, 3);
+        // One part empty: isolated vertices, treewidth 0.
+        let g2 = complete_bipartite(4, 0);
+        assert_eq!(g2.node_count(), 4);
+        assert_eq!(g2.edge_count(), 0);
+        assert_eq!(bb(&g2).treewidth, 0);
+    }
+
+    #[test]
+    fn wheel_w6() {
+        let g = wheel(6);
+        assert_eq!(g.node_count(), 7);
+        assert_eq!(g.edge_count(), 12); // 6 spokes + 6 rim edges
+        // Hub 6 adjacent to every rim vertex.
+        for i in 0..6 {
+            assert!(g.has_edge(NodeIndex::new(i), NodeIndex::new(6)));
+        }
+        assert_eq!(g.degree(NodeIndex::new(6)), 6);
+        assert_eq!(bb(&g).treewidth, 3);
+        // W_3 = K_4.
+        assert_eq!(wheel(3).edge_count(), 6);
+    }
+
+    #[test]
+    fn hypercube_q3() {
+        let g = hypercube(3);
+        assert_eq!(g.node_count(), 8);
+        assert_eq!(g.edge_count(), 12); // 8 * 3 / 2
+        for v in 0..8 {
+            assert_eq!(g.degree(NodeIndex::new(v)), 3, "vertex {v}");
+        }
+        assert_eq!(bb(&g).treewidth, 3);
+        // Q_0, Q_1, Q_2 sanity.
+        assert_eq!(hypercube(0).node_count(), 1);
+        assert_eq!(hypercube(1).edge_count(), 1);
+        assert_eq!(hypercube(2).edge_count(), 4);
+        // Hamming-distance rule spot check: 0-7 differ in 3 bits, no edge.
+        assert!(!g.has_edge(NodeIndex::new(0), NodeIndex::new(7)));
+        assert!(g.has_edge(NodeIndex::new(0), NodeIndex::new(4)));
+    }
+
+    #[test]
+    fn mobius_ladder_m4_is_wagner() {
+        let g = mobius_ladder(4);
+        assert_eq!(g.node_count(), 8);
+        assert_eq!(g.edge_count(), 12);
+        for v in 0..8 {
+            assert_eq!(g.degree(NodeIndex::new(v)), 3, "vertex {v}");
+        }
+        assert_eq!(bb(&g).treewidth, 4); // the Wagner graph
+        // Chords join opposite vertices.
+        assert!(g.has_edge(NodeIndex::new(0), NodeIndex::new(4)));
+        assert!(g.has_edge(NodeIndex::new(3), NodeIndex::new(7)));
+    }
+
+    #[test]
+    fn prisms() {
+        // Triangular prism: 6 vertices, 9 edges, treewidth 3.
+        let t = prism(3);
+        assert_eq!(t.node_count(), 6);
+        assert_eq!(t.edge_count(), 9);
+        for v in 0..6 {
+            assert_eq!(t.degree(NodeIndex::new(v)), 3, "vertex {v}");
+        }
+        assert_eq!(bb(&t).treewidth, 3);
+        // Pentagonal prism: 10 vertices, 15 edges, treewidth 4.
+        let p = prism(5);
+        assert_eq!(p.node_count(), 10);
+        assert_eq!(p.edge_count(), 15);
+        assert_eq!(bb(&p).treewidth, 4);
+        // Rungs connect the two cycles.
+        assert!(p.has_edge(NodeIndex::new(0), NodeIndex::new(5)));
+        assert!(p.has_edge(NodeIndex::new(9), NodeIndex::new(4)));
+    }
+
+    #[test]
+    fn friendship_f3() {
+        let g = friendship(3);
+        assert_eq!(g.node_count(), 7);
+        assert_eq!(g.edge_count(), 9);
+        assert_eq!(g.degree(NodeIndex::new(0)), 6);
+        assert_eq!(bb(&g).treewidth, 2);
+        // Every other vertex has degree 2.
+        for v in 1..7 {
+            assert_eq!(g.degree(NodeIndex::new(v)), 2, "vertex {v}");
+        }
     }
 }

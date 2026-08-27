@@ -22,9 +22,16 @@ use petgraph::visit::EdgeRef;
 /// NC ("no color") marks an uncolored vertex and is the default. Z and X carry
 /// a coordinate; H is a plain tag.
 #[derive(Clone, Copy, Debug, PartialEq, Default)]
-pub enum Color {
+pub enum VColor {
     Z(f64),
     X(f64),
+    H,
+    #[default]
+    NC,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Default)]
+pub enum EColor {
     H,
     #[default]
     NC,
@@ -37,7 +44,7 @@ pub enum Color {
 /// Color in the petgraph node weight; edges are unweighted.
 #[derive(Clone, Debug)]
 pub struct Graph {
-    inner: UnGraph<Color, ()>,
+    inner: UnGraph<VColor, (EColor)>,
     /// alive[i] is true iff vertex i has not been eliminated.
     alive: FixedBitSet,
 }
@@ -51,9 +58,8 @@ impl Graph {
         }
     }
 
-
     /// Add a new isolated vertex with the given color and return its index.
-    pub fn add_vertex_with(&mut self, color: Color) -> NodeIndex {
+    pub fn add_vertex_with(&mut self, color: VColor) -> NodeIndex {
         let idx = self.inner.add_node(color);
         let new_len = idx.index() + 1;
         if self.alive.len() < new_len {
@@ -66,26 +72,26 @@ impl Graph {
     /// Add a new isolated vertex with the default color (NC) and return its
     /// index.
     pub fn add_vertex(&mut self) -> NodeIndex {
-        self.add_vertex_with(Color::NC)
+        self.add_vertex_with(VColor::NC)
     }
 
     /// The color of vertex v.
-    pub fn color(&self, v: NodeIndex) -> &Color {
+    pub fn color(&self, v: NodeIndex) -> &VColor {
         self.inner.node_weight(v).expect("vertex exists")
     }
 
     /// Mutable access to the color of vertex v.
-    pub fn color_mut(&mut self, v: NodeIndex) -> &mut Color {
+    pub fn color_mut(&mut self, v: NodeIndex) -> &mut VColor {
         self.inner.node_weight_mut(v).expect("vertex exists")
     }
 
     /// Replace the color of vertex v.
-    pub fn set_color(&mut self, v: NodeIndex, color: Color) {
+    pub fn set_color(&mut self, v: NodeIndex, color: VColor) {
         *self.color_mut(v) = color;
     }
 
     /// Copy of the color of vertex v.
-    pub fn label(&self, v: NodeIndex) -> Color {
+    pub fn label(&self, v: NodeIndex) -> VColor {
         *self.color(v)
     }
 
@@ -141,7 +147,11 @@ impl Graph {
     /// Add an undirected edge {a, b}. The graph is a multigraph, so this
     /// always inserts a new edge: parallel edges and self-loops are allowed.
     pub fn add_edge(&mut self, a: NodeIndex, b: NodeIndex) {
-        self.inner.add_edge(a, b, ());
+        self.inner.add_edge(a, b, EColor::NC);
+    }
+
+    pub fn add_edge_c(&mut self, a: NodeIndex, b: NodeIndex, c: EColor) {
+        self.inner.add_edge(a, b, c);
     }
 
     /// Add an undirected edge {a, b} only if none already exists between a
@@ -149,7 +159,13 @@ impl Graph {
     /// must not create parallel edges.
     pub fn ensure_edge(&mut self, a: NodeIndex, b: NodeIndex) {
         if a != b {
-            self.inner.update_edge(a, b, ());
+            self.inner.update_edge(a, b, EColor::NC);
+        }
+    }
+
+    pub fn ensure_edge_c(&mut self, a: NodeIndex, b: NodeIndex, c: EColor) {
+        if a != b {
+            self.inner.update_edge(a, b, c);
         }
     }
 
@@ -507,25 +523,37 @@ fn canonical_hex(token: &str, line: usize) -> Result<String, String> {
     }
     let lower = token.to_ascii_lowercase();
     let trimmed = lower.trim_start_matches('0');
-    Ok(if trimmed.is_empty() { "0".to_string() } else { trimmed.to_string() })
+    Ok(if trimmed.is_empty() {
+        "0".to_string()
+    } else {
+        trimmed.to_string()
+    })
 }
 
 /// Parse a Graph3 multiplicity token, enforcing the 10 000 ceiling.
 fn graph3_multiplicity(token: &str, line: usize) -> Result<u32, String> {
     let canon = canonical_hex(token, line)?;
     if canon.len() > 4 {
-        return Err(format!("graph3 line {line}: multiplicity '{token}' exceeds 10000"));
+        return Err(format!(
+            "graph3 line {line}: multiplicity '{token}' exceeds 10000"
+        ));
     }
     let m = u32::from_str_radix(&canon, 16)
         .map_err(|_| format!("graph3 line {line}: invalid multiplicity '{token}'"))?;
     if m > 10_000 {
-        return Err(format!("graph3 line {line}: multiplicity '{token}' exceeds 10000"));
+        return Err(format!(
+            "graph3 line {line}: multiplicity '{token}' exceeds 10000"
+        ));
     }
     Ok(m)
 }
 
 /// Intern a canonical label, returning its vertex id (first-appearance order).
-fn register_label(labels: &mut Vec<String>, ids: &mut HashMap<String, usize>, label: String) -> usize {
+fn register_label(
+    labels: &mut Vec<String>,
+    ids: &mut HashMap<String, usize>,
+    label: String,
+) -> usize {
     if let Some(&i) = ids.get(&label) {
         return i;
     }
@@ -567,7 +595,10 @@ mod tests {
         let g2 = Graph::from_edges([(0, 0), (0, 1)]);
         assert_eq!(g2.node_count(), 2);
         assert!(g2.has_edge(NodeIndex::new(0), NodeIndex::new(0)));
-        assert_eq!(g2.edge_multiplicity(NodeIndex::new(0), NodeIndex::new(0)), 1);
+        assert_eq!(
+            g2.edge_multiplicity(NodeIndex::new(0), NodeIndex::new(0)),
+            1
+        );
     }
 
     #[test]
@@ -650,7 +681,10 @@ a a f
         assert_eq!(g.edge_multiplicity(NodeIndex::new(0), NodeIndex::new(1)), 2); // 1-2
         assert_eq!(g.edge_multiplicity(NodeIndex::new(1), NodeIndex::new(2)), 1); // 2-3
         assert_eq!(g.edge_multiplicity(NodeIndex::new(0), NodeIndex::new(2)), 1); // 1-3
-        assert_eq!(g.edge_multiplicity(NodeIndex::new(3), NodeIndex::new(3)), 15); // a-a
+        assert_eq!(
+            g.edge_multiplicity(NodeIndex::new(3), NodeIndex::new(3)),
+            15
+        ); // a-a
         assert_eq!(g.edge_multiplicity(NodeIndex::new(4), NodeIndex::new(5)), 3); // 10-20
         let out = g.to_graph3();
         assert_eq!(out, Graph::from_graph3(&out).unwrap().to_graph3());
@@ -658,9 +692,12 @@ a a f
 
     #[test]
     fn graph3_isolated_vertex_and_zero_multiplicity() {
-        let g = Graph::from_graph3(r"f
+        let g = Graph::from_graph3(
+            r"f
 1 2 0
-").unwrap();
+",
+        )
+        .unwrap();
         assert_eq!(g.node_count(), 3);
         assert_eq!(g.edge_count(), 0);
         let out = g.to_graph3();
@@ -670,9 +707,12 @@ a a f
 
     #[test]
     fn graph3_last_line_wins() {
-        let g = Graph::from_graph3(r"1 2 3
+        let g = Graph::from_graph3(
+            r"1 2 3
 2 1
-").unwrap();
+",
+        )
+        .unwrap();
         assert_eq!(g.edge_multiplicity(NodeIndex::new(0), NodeIndex::new(1)), 1);
     }
 
@@ -688,28 +728,40 @@ a a f
     #[test]
     fn graph3_canonicalizes_labels() {
         // a, A, 0a, 00a all spell hex 10, so they are one vertex.
-        let g = Graph::from_graph3(r"a
+        let g = Graph::from_graph3(
+            r"a
 A
 0a
 00a
-").unwrap();
+",
+        )
+        .unwrap();
         assert_eq!(g.node_count(), 1);
 
         // A == a and 0B == b, so the repeated pair collapses and the last line wins.
-        let g2 = Graph::from_graph3(r"A 0B 2
+        let g2 = Graph::from_graph3(
+            r"A 0B 2
 00a b 3
-").unwrap();
+",
+        )
+        .unwrap();
         assert_eq!(g2.node_count(), 2);
-        assert_eq!(g2.edge_multiplicity(NodeIndex::new(0), NodeIndex::new(1)), 3);
+        assert_eq!(
+            g2.edge_multiplicity(NodeIndex::new(0), NodeIndex::new(1)),
+            3
+        );
     }
 
     #[test]
     fn graph3_orders_vertices_numerically() {
         // Labels 2, f(15), 10(16). Numeric order is 2 < f < 10, so 10 is node 2
         // even though "10" sorts before "2" as text.
-        let g = Graph::from_graph3("10 2
+        let g = Graph::from_graph3(
+            "10 2
 f
-").unwrap();
+",
+        )
+        .unwrap();
         assert_eq!(g.node_count(), 3);
         assert_eq!(g.edge_multiplicity(NodeIndex::new(0), NodeIndex::new(2)), 1);
         assert_eq!(g.edge_multiplicity(NodeIndex::new(1), NodeIndex::new(2)), 0);
@@ -717,11 +769,14 @@ f
 
     #[test]
     fn graph3_ignores_blank_lines_and_whitespace() {
-        let g = Graph::from_graph3(r"
+        let g = Graph::from_graph3(
+            r"
 1 2
    
 2 3
-").unwrap();
+",
+        )
+        .unwrap();
         assert_eq!(g.node_count(), 3);
         assert_eq!(g.edge_multiplicity(NodeIndex::new(0), NodeIndex::new(1)), 1);
         assert_eq!(g.edge_multiplicity(NodeIndex::new(1), NodeIndex::new(2)), 1);
@@ -729,15 +784,21 @@ f
 
     #[test]
     fn graph3_handles_tabs() {
-        let g = Graph::from_graph3("1	2	3
-").unwrap();
+        let g = Graph::from_graph3(
+            "1	2	3
+",
+        )
+        .unwrap();
         assert_eq!(g.edge_multiplicity(NodeIndex::new(0), NodeIndex::new(1)), 3);
     }
 
     #[test]
     fn graph3_self_loop_does_not_affect_degree() {
-        let g = Graph::from_graph3("a a
-").unwrap();
+        let g = Graph::from_graph3(
+            "a a
+",
+        )
+        .unwrap();
         assert_eq!(g.node_count(), 1);
         assert!(g.has_edge(NodeIndex::new(0), NodeIndex::new(0)));
         assert_eq!(g.edge_multiplicity(NodeIndex::new(0), NodeIndex::new(0)), 1);
@@ -751,7 +812,10 @@ f
         // 10000 (0x2710) is the largest allowed multiplicity.
         let g = Graph::from_graph3("1 2 2710").unwrap();
         assert_eq!(g.edge_count(), 10000);
-        assert_eq!(g.edge_multiplicity(NodeIndex::new(0), NodeIndex::new(1)), 10000);
+        assert_eq!(
+            g.edge_multiplicity(NodeIndex::new(0), NodeIndex::new(1)),
+            10000
+        );
         // Just over the ceiling, and values that overflow a u16.
         assert!(Graph::from_graph3("1 2 2711").is_err());
         assert!(Graph::from_graph3("1 2 ffff").is_err());
@@ -764,24 +828,37 @@ f
 
     #[test]
     fn graph3_errors_report_line_numbers() {
-        let e = Graph::from_graph3(r"1 2
+        let e = Graph::from_graph3(
+            r"1 2
 2 3
 0x4 5
-").unwrap_err();
+",
+        )
+        .unwrap_err();
         assert!(e.contains("line 3"), "got: {e}");
-        let e2 = Graph::from_graph3("1 2
+        let e2 = Graph::from_graph3(
+            "1 2
 
 2 3 2711
-").unwrap_err();
+",
+        )
+        .unwrap_err();
         assert!(e2.contains("line 3"), "got: {e2}");
     }
 
     #[test]
     fn graph3_empty_input() {
         assert_eq!(Graph::from_graph3("").unwrap().node_count(), 0);
-        assert_eq!(Graph::from_graph3("  
+        assert_eq!(
+            Graph::from_graph3(
+                "  
 
-  ").unwrap().node_count(), 0);
+  "
+            )
+            .unwrap()
+            .node_count(),
+            0
+        );
     }
 
     #[test]
@@ -792,10 +869,13 @@ f
         g.add_edge(NodeIndex::new(0), NodeIndex::new(0)); // self-loop
         // vertex 2 is isolated
         let out = g.to_graph3();
-        assert_eq!(out, "2
+        assert_eq!(
+            out,
+            "2
 0 0
 0 1 2
-");
+"
+        );
         assert_eq!(Graph::from_graph3(&out).unwrap().to_graph3(), out);
     }
 
@@ -809,18 +889,31 @@ f
         let out = g.to_graph3();
         let parsed = Graph::from_graph3(&out).unwrap();
         assert_eq!(parsed.node_count(), 3);
-        assert_eq!(parsed.edge_multiplicity(NodeIndex::new(0), NodeIndex::new(1)), 1);
-        assert_eq!(parsed.edge_multiplicity(NodeIndex::new(1), NodeIndex::new(2)), 1);
-        assert_eq!(parsed.edge_multiplicity(NodeIndex::new(0), NodeIndex::new(2)), 1);
+        assert_eq!(
+            parsed.edge_multiplicity(NodeIndex::new(0), NodeIndex::new(1)),
+            1
+        );
+        assert_eq!(
+            parsed.edge_multiplicity(NodeIndex::new(1), NodeIndex::new(2)),
+            1
+        );
+        assert_eq!(
+            parsed.edge_multiplicity(NodeIndex::new(0), NodeIndex::new(2)),
+            1
+        );
     }
 
     #[test]
     fn graph3_file_round_trip() {
-        let path = std::env::temp_dir().join(format!("cartographer_graph3_{}.graph3", std::process::id()));
-        let g = Graph::from_graph3(r"1 2 3
+        let path =
+            std::env::temp_dir().join(format!("cartographer_graph3_{}.graph3", std::process::id()));
+        let g = Graph::from_graph3(
+            r"1 2 3
 2 3
 f
-").unwrap();
+",
+        )
+        .unwrap();
         g.to_graph3_file(&path).unwrap();
         let g2 = Graph::from_graph3_file(&path).unwrap();
         assert_eq!(g.to_graph3(), g2.to_graph3());
@@ -856,13 +949,16 @@ f
         use crate::bb_tw;
         // P5 plus parallel edges and self-loops: treewidth is still that of P5.
         let simple = Graph::from_edges([(0, 1), (1, 2), (2, 3), (3, 4)]);
-        let multi = Graph::from_graph3(r"0 1 3
+        let multi = Graph::from_graph3(
+            r"0 1 3
 1 2
 2 3 2
 3 4
 4 4 f
 0 0
-").unwrap();
+",
+        )
+        .unwrap();
         assert_eq!(bb_tw(&simple), 1);
         assert_eq!(bb_tw(&multi), 1);
     }
@@ -873,19 +969,19 @@ f
 
         // Build a colored graph vertex-by-vertex.
         let mut g = Graph::new();
-        let a = g.add_vertex_with(Color::Z(0.5));
-        let b = g.add_vertex_with(Color::X(1.0));
-        let c = g.add_vertex_with(Color::H);
+        let a = g.add_vertex_with(VColor::Z(0.5));
+        let b = g.add_vertex_with(VColor::X(1.0));
+        let c = g.add_vertex_with(VColor::H);
         g.add_edge(a, b);
         g.add_edge(b, c);
 
-        assert_eq!(g.label(a), Color::Z(0.5));
-        assert_eq!(g.label(b), Color::X(1.0));
-        assert_eq!(g.label(c), Color::H);
+        assert_eq!(g.label(a), VColor::Z(0.5));
+        assert_eq!(g.label(b), VColor::X(1.0));
+        assert_eq!(g.label(c), VColor::H);
 
         // Mutate a color in place.
-        g.set_color(c, Color::Z(2.0));
-        assert_eq!(g.label(c), Color::Z(2.0));
+        g.set_color(c, VColor::Z(2.0));
+        assert_eq!(g.label(c), VColor::Z(2.0));
 
         // Topology and solvers work on the colored graph unchanged.
         assert_eq!(g.node_count(), 3);
@@ -893,11 +989,11 @@ f
 
         // Uncolored constructors default every vertex to NC.
         let g2 = Graph::from_edges([(0, 1), (1, 2)]);
-        assert_eq!(g2.label(NodeIndex::new(0)), Color::NC);
-        assert_eq!(g2.label(NodeIndex::new(1)), Color::NC);
+        assert_eq!(g2.label(NodeIndex::new(0)), VColor::NC);
+        assert_eq!(g2.label(NodeIndex::new(1)), VColor::NC);
 
         let mut g3 = Graph::new();
         g3.add_vertex();
-        assert_eq!(g3.label(NodeIndex::new(0)), Color::NC);
+        assert_eq!(g3.label(NodeIndex::new(0)), VColor::NC);
     }
 }
