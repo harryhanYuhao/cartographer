@@ -22,6 +22,7 @@ type Bits = FixedBitSet;
 
 /// An undirected graph stored as adjacency bitsets (self-contained, for fast
 /// set neighbourhood / component queries).
+#[derive(Clone)]
 struct BGraph {
     n: usize,
     adj: Vec<Bits>,
@@ -208,6 +209,100 @@ impl BGraph {
             .map(|v| self.adj[v].count_ones(..))
             .min()
             .unwrap_or(0)
+    }
+
+    /// Degeneracy (a valid lower bound on treewidth: tw(G) >= degeneracy(G),
+    /// because a graph of treewidth k is k-degenerate).
+    fn degeneracy(&self) -> usize {
+        let mut deg: Vec<usize> = (0..self.n).map(|v| self.adj[v].count_ones(..)).collect();
+        let mut alive = Bits::with_capacity(self.n);
+        for v in 0..self.n {
+            alive.insert(v);
+        }
+        let mut max_min = 0usize;
+        for _ in 0..self.n {
+            let v = (0..self.n)
+                .filter(|&x| alive.contains(x))
+                .min_by_key(|&x| deg[x])
+                .expect("alive vertex");
+            max_min = max_min.max(deg[v]);
+            for nb in self.adj[v].ones() {
+                if alive.contains(nb) {
+                    deg[nb] -= 1;
+                }
+            }
+            alive.set(v, false);
+        }
+        max_min
+    }
+
+    /// Add the undirected edge a-b.
+    fn add_edge(&mut self, a: usize, b: usize) {
+        self.adj[a].insert(b);
+        self.adj[b].insert(a);
+    }
+
+    /// Remove v, relabelling the remaining vertices densely. Returns the new
+    /// graph and the old-to-new index map (the deleted vertex maps to
+    /// usize::MAX).
+    fn remove_vertex(&self, v: usize) -> (BGraph, Vec<usize>) {
+        let m = self.n - 1;
+        let mut map = vec![usize::MAX; self.n];
+        let mut next = 0usize;
+        for old in 0..self.n {
+            if old != v {
+                map[old] = next;
+                next += 1;
+            }
+        }
+        let mut adj = Vec::with_capacity(m);
+        for old in 0..self.n {
+            if old == v {
+                continue;
+            }
+            let mut bits = Bits::with_capacity(m);
+            for nb in self.adj[old].ones() {
+                if nb != v {
+                    bits.insert(map[nb]);
+                }
+            }
+            adj.push(bits);
+        }
+        (BGraph { n: m, adj }, map)
+    }
+
+    /// Eliminate `v`: complete `N(v)` into a clique (fill-in) and remove `v`.
+    /// Returns the new graph and `deg(v)` in the pre-fill graph.
+    fn eliminate_vertex(&self, v: usize) -> (BGraph, usize) {
+        let d = self.adj[v].count_ones(..);
+        let nb: Vec<usize> = self.adj[v].ones().collect();
+        let mut filled = self.clone();
+        for i in 0..nb.len() {
+            for j in (i + 1)..nb.len() {
+                filled.add_edge(nb[i], nb[j]);
+            }
+        }
+        let (g, _) = filled.remove_vertex(v);
+        (g, d)
+    }
+
+    /// Is v simplicial (N(v) is a clique)?
+    fn is_simplicial_vertex(&self, v: usize) -> bool {
+        self.is_clique(&self.adj[v])
+    }
+
+    /// Is v almost simplicial (some w in N(v) leaves N(v) minus w a clique)?
+    /// Also true for every degree-<=2 vertex, but the reduction driver removes
+    /// those via the simplicial/series rules first.
+    fn is_almost_simplicial_vertex(&self, v: usize) -> bool {
+        for w in self.adj[v].ones() {
+            let mut s = self.adj[v].clone();
+            s.set(w, false);
+            if self.is_clique(&s) {
+                return true;
+            }
+        }
+        false
     }
 
     /// Induced subgraph on `verts`, with vertices relabelled densely.
@@ -670,10 +765,87 @@ fn decide(g: &BGraph, k: usize) -> bool {
     s_list.iter().any(|k| g.outlet(k).is_clear())
 }
 
-/// Treewidth of a connected graph, with safe-separator decomposition.
+/// Lowest-index degree-2 vertex with non-adjacent neighbours, as (v, u, w).
+fn find_series(g: &BGraph) -> Option<(usize, usize, usize)> {
+    for v in 0..g.n {
+        if g.adj[v].count_ones(..) == 2 {
+            let nb: Vec<usize> = g.adj[v].ones().collect();
+            let (u, w) = (nb[0], nb[1]);
+            if !g.adj[u].contains(w) {
+                return Some((v, u, w));
+            }
+        }
+    }
+    None
+}
+
+/// Vertex reductions that preserve treewidth up to the returned lower bound:
+/// returns (reduced graph, gv) with tw(G) = max(gv, tw(reduced)).
+///
+/// - simplicial vertices are removed unconditionally
+///   (tw(G) = max(deg(v), tw(G - v)));
+/// - series vertices (degree 2 with non-adjacent neighbours) are smoothed
+///   (tw(G) = tw(G - v + uw), subdivision invariance);
+/// - almost-simplicial vertices of degree at most the degeneracy (a valid
+///   lower bound on tw) are eliminated: N(v) is completed into a clique and v
+///   removed (tw(G) = max(deg(v), tw(G - v + fill(N(v))))).
+fn reduce(g: &BGraph) -> (BGraph, usize) {
+    let mut cur = g.clone();
+    let mut gv = 0usize;
+    loop {
+        // Simplicial: safe unconditionally.
+        if let Some(v) = (0..cur.n).find(|&v| cur.is_simplicial_vertex(v)) {
+            let d = cur.adj[v].count_ones(..);
+            let (g2, _) = cur.remove_vertex(v);
+            cur = g2;
+            gv = gv.max(d);
+            continue;
+        }
+        // Series: degree 2 with non-adjacent neighbours -> connect them.
+        if let Some((v, u, w)) = find_series(&cur) {
+            let (mut g2, map) = cur.remove_vertex(v);
+            g2.add_edge(map[u], map[w]);
+            cur = g2;
+            continue;
+        }
+        // Almost-simplicial: safe only when degree <= tw(G); approximate tw(G)
+        // with the degeneracy (a valid lower bound).
+        let lb = cur.degeneracy();
+        if let Some(v) = (0..cur.n).find(|&v| {
+            cur.adj[v].count_ones(..) <= lb && cur.is_almost_simplicial_vertex(v)
+        }) {
+            let (g2, d) = cur.eliminate_vertex(v);
+            cur = g2;
+            gv = gv.max(d);
+            continue;
+        }
+        break;
+    }
+    (cur, gv)
+}
+
+/// Treewidth of a connected graph, with vertex reductions and safe-separator
+/// decomposition.
 fn tw_connected(g: &BGraph) -> usize {
     if g.n <= 1 {
         return 0;
+    }
+
+    // Vertex reductions, which may also disconnect the graph.
+    let (g, gv) = reduce(g);
+    if g.n <= 1 {
+        return gv;
+    }
+
+    // Re-decompose if the reductions disconnected the graph.
+    let comps = g.components(&Bits::with_capacity(g.n));
+    if comps.len() > 1 {
+        let mut tw = 0usize;
+        for c in comps {
+            let sub = g.induced_subgraph(&c);
+            tw = tw.max(tw_connected(&sub));
+        }
+        return gv.max(tw);
     }
 
     // Decompose across a safe separator if one is found: completing S into a
@@ -685,12 +857,12 @@ fn tw_connected(g: &BGraph) -> usize {
             let sub = g.induced_with_clique(&c, &s);
             tw = tw.max(tw_connected(&sub));
         }
-        return tw;
+        return gv.max(tw);
     }
 
-    let mut k = g.min_degree();
+    let mut k = gv.max(g.degeneracy());
     loop {
-        if decide(g, k) {
+        if decide(&g, k) {
             return k;
         }
         k += 1;
@@ -766,6 +938,23 @@ mod tests {
         assert_eq!(pidd_tw(&grid3x3()), 3);
         assert_eq!(pidd_tw(&Graph::with_capacity(0)), 0);
         assert_eq!(pidd_tw(&Graph::with_capacity(1)), 0);
+    }
+
+    #[test]
+    fn series_reduction_subdivision() {
+        // K4 with edge 0-1 subdivided by vertex 4 (path 0-4-1): tw stays 3.
+        let g = Graph::from_edges([
+            (0, 2), (0, 3), (0, 4),
+            (1, 2), (1, 3), (1, 4),
+            (2, 3),
+        ]);
+        assert_eq!(pidd_tw(&g), 3);
+
+        // C6: all degree-2 with non-adjacent neighbours -> series reduces.
+        assert_eq!(pidd_tw(&Graph::from_edges([(0,1),(1,2),(2,3),(3,4),(4,5),(5,0)])), 2);
+
+        // P3: degree-2 series vertex whose neighbours become adjacent.
+        assert_eq!(pidd_tw(&Graph::from_edges([(0, 1), (1, 2)])), 1);
     }
 
     #[test]
