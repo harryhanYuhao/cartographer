@@ -14,7 +14,7 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use fixedbitset::FixedBitSet;
-use petgraph::graph::{NodeIndex, UnGraph};
+use petgraph::graph::{EdgeIndex, NodeIndex, UnGraph};
 use petgraph::visit::EdgeRef;
 
 /// The per-vertex color (label).
@@ -23,8 +23,9 @@ use petgraph::visit::EdgeRef;
 /// a coordinate; H is a plain tag.
 #[derive(Clone, Copy, Debug, PartialEq, Default)]
 pub enum VColor {
-    Z(f64),
-    X(f64),
+    /// Z(s) is Z spider with phase s * pi / 4; therefore s is integer mode 8
+    Z(u8),
+    X(u8),
     H,
     #[default]
     NC,
@@ -44,7 +45,7 @@ pub enum EColor {
 /// Color in the petgraph node weight; edges are unweighted.
 #[derive(Clone, Debug)]
 pub struct Graph {
-    inner: UnGraph<VColor, (EColor)>,
+    inner: UnGraph<VColor, EColor>,
     /// alive[i] is true iff vertex i has not been eliminated.
     alive: FixedBitSet,
 }
@@ -166,6 +167,36 @@ impl Graph {
     pub fn ensure_edge_c(&mut self, a: NodeIndex, b: NodeIndex, c: EColor) {
         if a != b {
             self.inner.update_edge(a, b, c);
+        }
+    }
+
+    /// Iterate over all edges whose endpoints are both alive, as
+    /// `(source, target, edge index)` triples. Parallel edges are yielded
+    /// separately; the endpoints are in petgraph's stored order (unordered
+    /// for an undirected graph). The edge index stays valid even if an
+    /// endpoint is later logically deleted, so it can be passed to
+    /// [Graph::set_edge_color].
+    pub fn edges(&self) -> impl Iterator<Item = (NodeIndex, NodeIndex, EdgeIndex)> + '_ {
+        self.inner.edge_references().filter_map(|er| {
+            let s = er.source();
+            let t = er.target();
+            if self.alive.contains(s.index()) && self.alive.contains(t.index()) {
+                Some((s, t, er.id()))
+            } else {
+                None
+            }
+        })
+    }
+
+    /// The color of edge `e`.
+    pub fn edge_color(&self, e: EdgeIndex) -> EColor {
+        self.inner.edge_weight(e).copied().expect("edge exists")
+    }
+
+    /// Replace the color of edge `e`.
+    pub fn set_edge_color(&mut self, e: EdgeIndex, c: EColor) {
+        if let Some(w) = self.inner.edge_weight_mut(e) {
+            *w = c;
         }
     }
 
@@ -315,6 +346,7 @@ impl Graph {
             self.inner.remove_edge(edge);
         }
     }
+
     pub fn remove_vertex(&mut self, v: NodeIndex) {
         self.alive.set(v.index(), false);
     }
@@ -969,19 +1001,19 @@ f
 
         // Build a colored graph vertex-by-vertex.
         let mut g = Graph::new();
-        let a = g.add_vertex_with(VColor::Z(0.5));
-        let b = g.add_vertex_with(VColor::X(1.0));
+        let a = g.add_vertex_with(VColor::Z(0));
+        let b = g.add_vertex_with(VColor::X(1));
         let c = g.add_vertex_with(VColor::H);
         g.add_edge(a, b);
         g.add_edge(b, c);
 
-        assert_eq!(g.label(a), VColor::Z(0.5));
-        assert_eq!(g.label(b), VColor::X(1.0));
+        assert_eq!(g.label(a), VColor::Z(0));
+        assert_eq!(g.label(b), VColor::X(1));
         assert_eq!(g.label(c), VColor::H);
 
         // Mutate a color in place.
-        g.set_color(c, VColor::Z(2.0));
-        assert_eq!(g.label(c), VColor::Z(2.0));
+        g.set_color(c, VColor::Z(2));
+        assert_eq!(g.label(c), VColor::Z(2));
 
         // Topology and solvers work on the colored graph unchanged.
         assert_eq!(g.node_count(), 3);

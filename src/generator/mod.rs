@@ -17,7 +17,10 @@
 pub mod named;
 pub mod random;
 pub mod small;
+pub mod zx;
 
 pub use named::*;
 pub use random::*;
 pub use small::*;
+pub use zx::*;
+

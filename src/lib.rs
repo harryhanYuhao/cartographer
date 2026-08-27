@@ -50,6 +50,7 @@ pub mod graph;
 pub mod io;
 
 mod cli;
+mod operation;
 
 pub use algorithm::{BbResult, bb, bb_tw, pidd_tw};
-pub use graph::{Graph, VColor};
+pub use graph::{EColor, Graph, VColor};
