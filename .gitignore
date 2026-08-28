@@ -2,3 +2,5 @@ target/
 
 *pdf
 .zcode
+
+.graph3

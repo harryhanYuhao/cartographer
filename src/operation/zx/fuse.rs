@@ -19,7 +19,10 @@
 use petgraph::graph::NodeIndex;
 
 use crate::graph::{Graph, VColor};
-use crate::operation::utils::{get_normal_neighbour, nc_connected};
+use crate::operation::{
+    utils::{get_normal_neighbour, nc_connected},
+    zx::normalize_h_parity::normalize_h_parity_total,
+};
 
 /// A valid fuse pair: two distinct alive spiders of the same colour (both Z
 /// or both X) joined by at least one normal edge.
@@ -91,8 +94,10 @@ pub fn fuse_vertices(g: &Graph, v1: NodeIndex, v2: NodeIndex) -> Graph {
 /// Apply fuse_vertices repeatedly until no valid pair remains.
 pub fn fuse_total(g: &Graph) -> Graph {
     let mut tmp = g.clone();
+    tmp = normalize_h_parity_total(&tmp);
     while let Some((v1, v2)) = has_valid_fuse(&tmp) {
         tmp = fuse_vertices(&tmp, v1, v2);
+        tmp = normalize_h_parity_total(&tmp);
     }
     tmp
 }
