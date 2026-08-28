@@ -11,7 +11,7 @@
 //! - joins a fresh `X(7)` spider to `v` alone, by a normal edge.
 //!
 //!
-//! K3 edge removal hadamard 2: 
+//! K3 edge removal hadamard 2:
 //! is similar t K3 edge removal degree 2, but it targets a vertex `v` whose
 //! order that may be greater than 2, but contain exactly two distinct neighbours `a`, `b`
 //! by H edge. (v, a), (v, b) are connected by H edge.
@@ -34,7 +34,6 @@ use petgraph::graph::NodeIndex;
 
 use crate::graph::{EColor, Graph, VColor};
 use crate::operation::utils::h_connected;
-
 
 fn valid_k3_vertex_degree2(g: &Graph, v: NodeIndex) -> bool {
     if !g.is_alive(v) {
@@ -88,7 +87,7 @@ pub fn k3_remove_edge_degree_2(g: &Graph) -> Graph {
     let mut tmp = g.clone();
     loop {
         match has_valid_k3_vertex_degree2(&tmp) {
-            Some(v) => tmp = k3_remove_edge_degree2_on_vertex(g, v),
+            Some(v) => tmp = k3_remove_edge_degree2_on_vertex(&tmp, v),
             None => break,
         }
     }
@@ -127,7 +126,8 @@ mod tests {
     #[test]
     fn applies_to_h_triangle_of_z_spiders() {
         let before = h_triangle();
-        let out = k3_remove_edge(&before);
+        let v = NodeIndex::new(0);
+        let out = k3_remove_edge_degree2_on_vertex(&before, v);
 
         // One new vertex: the X(7) leaf.
         assert_eq!(out.node_count(), 4);
@@ -164,7 +164,7 @@ mod tests {
         g.set_color(NodeIndex::new(1), VColor::Z(7));
         g.set_color(NodeIndex::new(2), VColor::Z(5));
 
-        let out = k3_remove_edge(&g);
+        let out = k3_remove_edge_degree2_on_vertex(&g, NodeIndex::new(0));
         assert_eq!(out.label(NodeIndex::new(0)), VColor::Z(3)); // v keeps phase
         assert_eq!(out.label(NodeIndex::new(1)), VColor::Z(0)); // 7 + 1 wraps
         assert_eq!(out.label(NodeIndex::new(2)), VColor::Z(6));
@@ -181,16 +181,16 @@ mod tests {
             g.add_edge_c(NodeIndex::new(target), leaf, EColor::H);
         }
 
-        let out = k3_remove_edge(&g);
+        let out = k3_remove_edge_degree2_on_vertex(&g, NodeIndex::new(0));
         assert_eq!(out.node_count(), g.node_count());
         assert_eq!(out.edge_count(), g.edge_count());
         assert_eq!(sorted_colored_edges(&out), sorted_colored_edges(&g));
     }
 
     #[test]
-    fn picks_lowest_index_applicable_vertex() {
-        // Two disjoint triangles at nodes {0,1,2} and {3,4,5}: the rewrite
-        // must anchor on node 0 and append its leaf as node 6.
+    fn fixpoint_rewrites_every_applicable_triangle() {
+        // Two disjoint triangles at nodes {0,1,2} and {3,4,5}: the fixpoint
+        // must consume both, appending one X(7) leaf per site (6 and 7).
         let mut g = h_triangle();
         for _ in 0..3 {
             g.add_vertex_with(VColor::Z(0));
@@ -199,8 +199,8 @@ mod tests {
             g.add_edge_c(NodeIndex::new(p), NodeIndex::new(q), EColor::H);
         }
 
-        let out = k3_remove_edge(&g);
-        assert_eq!(out.node_count(), 7);
+        let out = k3_remove_edge_degree_2(&g);
+        assert_eq!(out.node_count(), 8);
         assert_eq!(
             sorted_colored_edges(&out),
             vec![
@@ -209,9 +209,23 @@ mod tests {
                 (0, 6, EColor::NC),
                 (3, 4, EColor::H),
                 (3, 5, EColor::H),
-                (4, 5, EColor::H),
+                (3, 7, EColor::NC),
             ]
         );
+        assert_eq!(out.label(NodeIndex::new(6)), VColor::X(7));
+        assert_eq!(out.label(NodeIndex::new(7)), VColor::X(7));
+    }
+
+    #[test]
+    fn fixpoint_is_idempotent() {
+        let mut g = h_triangle();
+        let leaf = g.add_vertex_with(VColor::Z(0));
+        g.add_edge_c(NodeIndex::new(1), leaf, EColor::H);
+
+        let once = k3_remove_edge_degree_2(&g);
+        let twice = k3_remove_edge_degree_2(&once);
+        assert_eq!(sorted_colored_edges(&once), sorted_colored_edges(&twice));
+        assert_eq!(once.node_count(), twice.node_count());
     }
 
     #[test]
@@ -225,7 +239,7 @@ mod tests {
             g.add_edge_c(NodeIndex::new(p), NodeIndex::new(q), EColor::NC);
         }
 
-        let out = k3_remove_edge(&g);
+        let out = k3_remove_edge_degree2_on_vertex(&g, NodeIndex::new(0));
         assert_eq!(out.node_count(), 3);
         assert_eq!(out.to_graph3(), g.to_graph3());
     }
@@ -241,7 +255,7 @@ mod tests {
             g.add_edge_c(NodeIndex::new(p), NodeIndex::new(q), EColor::H);
         }
 
-        let out = k3_remove_edge(&g);
+        let out = k3_remove_edge_degree2_on_vertex(&g, NodeIndex::new(0));
         assert_eq!(out.node_count(), 3);
         assert_eq!(out.to_graph3(), g.to_graph3());
     }
@@ -251,7 +265,7 @@ mod tests {
         let mut g = h_triangle();
         g.set_color(NodeIndex::new(1), VColor::X(0));
 
-        let out = k3_remove_edge(&g);
+        let out = k3_remove_edge_degree2_on_vertex(&g, NodeIndex::new(0));
         assert_eq!(out.node_count(), 3);
         assert_eq!(out.to_graph3(), g.to_graph3());
     }

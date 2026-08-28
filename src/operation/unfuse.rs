@@ -7,7 +7,8 @@ use crate::graph::{EColor, Graph, VColor};
 /// Split `v = Z(p)` so that its normal-edge neighbourhood hangs behind two
 /// fresh spiders.
 ///
-/// Precondition: `v` is an alive Z spider with phase `p`. Its alive
+/// `v` must be an alive Z spider with phase `p`; any other target returns
+/// the graph unchanged. Its alive
 /// neighbours partition into `N1` (joined by a normal edge) and `N2` (joined
 /// by an H edge). The rewrite turns
 ///
@@ -183,10 +184,12 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "v must be an alive Z spider")]
-    fn rejects_non_z_target() {
+    fn returns_unchanged_for_non_z_target() {
         let mut g = Graph::new();
         let v = g.add_vertex_with(VColor::X(0));
-        unfuse_to_sep_h_edge(&g, v);
+        let out = unfuse_to_sep_h_edge(&g, v);
+        assert_eq!(out.node_count(), 1);
+        assert_eq!(sorted_colored_edges(&out), sorted_colored_edges(&g));
+        assert_eq!(out.label(v), VColor::X(0));
     }
 }
