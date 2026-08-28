@@ -31,4 +31,4 @@ pub mod pidd;
 pub use branchbound::{BbResult, bb, bb_tw};
 pub use minfill::min_fill;
 pub use mmw::minor_min_width;
-pub use pidd::{pidd_tw};
+pub use pidd::pidd_tw;

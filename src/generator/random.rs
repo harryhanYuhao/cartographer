@@ -205,7 +205,9 @@ pub fn barabasi_albert(n: usize, m: usize, rng: &mut impl Rng) -> Graph {
 ///
 /// Guarantees `node_count == n` (for `n >= 0`). The specific model and
 /// parameter are chosen by `rng`.
-pub fn random_graph(n: usize, rng: &mut impl Rng) -> Graph {
+pub fn random_graph(n: usize) -> Graph {
+    let mut rng_t = rand::rng();
+    let mut rng = &mut rng_t;
     if n < 2 {
         return with_n_vertices(n);
     }
@@ -337,9 +339,8 @@ mod tests {
 
     #[test]
     fn random_graph_vertex_count_and_lb() {
-        let mut rng = seeded();
         for n in [2usize, 5, 10, 20] {
-            let g = random_graph(n, &mut rng);
+            let g = random_graph(n);
             assert_eq!(g.node_count(), n, "wrong node count for n={n}");
             // Treewidth lower bound must be a sane non-negative value.
             let lb = minor_min_width(&g);

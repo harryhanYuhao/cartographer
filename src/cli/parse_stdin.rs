@@ -22,7 +22,7 @@
 use std::io::{self, Read};
 use std::process::ExitCode;
 
-use crate::bb;
+use crate::algorithm::bb;
 use crate::graph::Graph;
 
 fn stdin_compute_tw() -> ExitCode {

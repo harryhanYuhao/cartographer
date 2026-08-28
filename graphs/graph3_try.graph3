@@ -1,0 +1,29 @@
+# Graph Board Graph3 export
+# Exported: 2026-08-28T10:46:54.785Z
+# Title: zx-dot
+# Nodes: 10, Edges: 15
+1 : Z(0)
+2 : Z(0)
+3 : Z(0)
+4 : Z(0)
+5 : Z(0)
+6 : Z(0)
+7 : Z(0)
+8 : Z(0)
+9 : Z(0)
+a : Z(0)
+1 2 : H
+1 4 : H
+1 5 : H
+1 7 : H
+2 4 : H
+2 6 : H
+3 8 : H
+3 a : H
+4 7 : H
+4 8 : H
+5 7 : H
+5 8 : H
+7 9 : H
+8 9 : H
+9 a : H

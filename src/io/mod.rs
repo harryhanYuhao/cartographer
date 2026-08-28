@@ -6,6 +6,12 @@ use crate::Graph;
 use std::fs::File;
 use std::io::{Error, Write};
 
+pub fn append_to_file(s: &str, filename: &str) -> Result<(), Error> {
+    let mut file = File::options().append(true).open(filename)?;
+    write!(file, "{s}")?;
+    Ok(())
+}
+
 /// Write `g` to `filename` in Graph3 format (see [`graph3`]).
 pub fn export_graph3(g: &Graph, filename: &str) -> Result<(), Error> {
     let mut file = File::create(filename)?;

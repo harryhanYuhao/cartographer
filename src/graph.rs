@@ -537,7 +537,7 @@ mod tests {
 
     #[test]
     fn treewidth_ignores_parallel_edges_and_self_loops() {
-        use crate::bb_tw;
+        use crate::algorithm::bb_tw;
         // P5 plus parallel edges and self-loops: treewidth is still that of P5.
         let simple = Graph::from_edges([(0, 1), (1, 2), (2, 3), (3, 4)]);
         let multi = Graph::from_graph3(
@@ -556,7 +556,7 @@ mod tests {
 
     #[test]
     fn colored_graph_with_enum_labels() {
-        use crate::bb_tw;
+        use crate::algorithm::bb_tw;
 
         // Build a colored graph vertex-by-vertex.
         let mut g = Graph::new();

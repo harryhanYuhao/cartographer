@@ -1,6 +1,13 @@
 use crate::graph::{EColor, Graph};
 use petgraph::graph::NodeIndex;
 
+/// Is there a normal-coloured edge between `a` and `b`?
+pub fn nc_connected(g: &Graph, a: NodeIndex, b: NodeIndex) -> bool {
+    g.edges().any(|(s, t, e)| {
+        g.edge_color(e) == EColor::NC && ((s == a && t == b) || (s == b && t == a))
+    })
+}
+
 /// Is there an H-coloured edge between `a` and `b`?
 pub fn h_connected(g: &Graph, a: NodeIndex, b: NodeIndex) -> bool {
     g.edges()

@@ -29,13 +29,13 @@
 //!   [`barabasi_albert`][generator::random::barabasi_albert],
 //!   [`random_graph`][generator::random::random_graph]).
 //!
-//! For convenience, [`bb_tw`], [`pidd_tw`], and [`Graph`] are re-exported at the crate
-//! root.
+//! For convenience, [`Graph`], [`VColor`], and [`EColor`] are re-exported at
+//! the crate root.
 //!
 //! # Example
 //! ```
 //! use cartographer::graph::Graph;
-//! use cartographer::bb;
+//! use cartographer::algorithm::bb;
 //!
 //! // Path 0-1-2-3-4, treewidth 1.
 //! let g = Graph::from_edges([(0,1),(1,2),(2,3),(3,4)]);
@@ -48,9 +48,8 @@ pub mod algorithm;
 pub mod generator;
 pub mod graph;
 pub mod io;
+pub mod operation;
 
 mod cli;
-mod operation;
 
-pub use algorithm::{BbResult, bb, bb_tw, pidd_tw};
 pub use graph::{EColor, Graph, VColor};

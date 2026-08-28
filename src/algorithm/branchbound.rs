@@ -358,20 +358,37 @@ mod tests {
     fn bb_baseline(g: &Graph) -> BbResult {
         if g.alive_count() < 2 {
             let order: Vec<NodeIndex> = g.alive_vertices().collect();
-            return BbResult { treewidth: 0, order, optimal: true };
+            return BbResult {
+                treewidth: 0,
+                order,
+                optimal: true,
+            };
         }
         let (ub, ub_order) = minfill::min_fill(g);
         let lb = mmw::minor_min_width(g);
         if lb == ub {
-            return BbResult { treewidth: ub, order: ub_order, optimal: true };
+            return BbResult {
+                treewidth: ub,
+                order: ub_order,
+                optimal: true,
+            };
         }
         let mut best = (ub, ub_order);
         let mut path = Vec::with_capacity(g.alive_count());
         bb_baseline_helper(g, 0, &mut path, &mut best);
-        BbResult { treewidth: best.0, order: best.1, optimal: true }
+        BbResult {
+            treewidth: best.0,
+            order: best.1,
+            optimal: true,
+        }
     }
 
-    fn bb_baseline_helper(g: &Graph, g_s: usize, path: &mut Vec<NodeIndex>, best: &mut (usize, Vec<NodeIndex>)) {
+    fn bb_baseline_helper(
+        g: &Graph,
+        g_s: usize,
+        path: &mut Vec<NodeIndex>,
+        best: &mut (usize, Vec<NodeIndex>),
+    ) {
         if g.alive_count() < 2 {
             if g_s < best.0 {
                 best.0 = g_s;
@@ -556,7 +573,10 @@ mod tests {
                     r.treewidth, expected
                 );
                 assert!(r.optimal);
-                assert!(is_permutation(&g, &r.order), "n={n}: order not a permutation");
+                assert!(
+                    is_permutation(&g, &r.order),
+                    "n={n}: order not a permutation"
+                );
                 assert_eq!(
                     elimination_width(&g, &r.order),
                     r.treewidth,

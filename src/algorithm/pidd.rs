@@ -102,7 +102,9 @@ impl BGraph {
     /// The outbound full component of `s` (the one with the smallest minimum
     /// vertex), if any.
     fn outbound_full_component(&self, s: &Bits) -> Option<Bits> {
-        self.full_components(s).into_iter().min_by_key(|c| c.minimum())
+        self.full_components(s)
+            .into_iter()
+            .min_by_key(|c| c.minimum())
     }
 
     /// Is `s` a potential maximal clique (Theorem 3.15 of Bouchitté–Todinca):
@@ -453,7 +455,9 @@ impl BGraph {
                     best = Some((v, fill));
                 }
             }
-            let Some((v, _)) = best else { break; };
+            let Some((v, _)) = best else {
+                break;
+            };
 
             let nv = neighbors_of(&adj, &alive, v);
             cands.push(nv.clone());
@@ -811,9 +815,9 @@ fn reduce(g: &BGraph) -> (BGraph, usize) {
         // Almost-simplicial: safe only when degree <= tw(G); approximate tw(G)
         // with the degeneracy (a valid lower bound).
         let lb = cur.degeneracy();
-        if let Some(v) = (0..cur.n).find(|&v| {
-            cur.adj[v].count_ones(..) <= lb && cur.is_almost_simplicial_vertex(v)
-        }) {
+        if let Some(v) = (0..cur.n)
+            .find(|&v| cur.adj[v].count_ones(..) <= lb && cur.is_almost_simplicial_vertex(v))
+        {
             let (g2, d) = cur.eliminate_vertex(v);
             cur = g2;
             gv = gv.max(d);
@@ -932,9 +936,25 @@ mod tests {
 
     #[test]
     fn known_values() {
-        assert_eq!(pidd_tw(&Graph::from_edges([(0, 1), (1, 2), (2, 3), (3, 4)])), 1); // P5
-        assert_eq!(pidd_tw(&Graph::from_edges([(0, 1), (1, 2), (2, 3), (3, 4), (4, 0)])), 2); // C5
-        assert_eq!(pidd_tw(&Graph::from_edges([(0, 1), (0, 2), (0, 3), (1, 2), (1, 3), (2, 3)])), 3); // K4
+        assert_eq!(
+            pidd_tw(&Graph::from_edges([(0, 1), (1, 2), (2, 3), (3, 4)])),
+            1
+        ); // P5
+        assert_eq!(
+            pidd_tw(&Graph::from_edges([(0, 1), (1, 2), (2, 3), (3, 4), (4, 0)])),
+            2
+        ); // C5
+        assert_eq!(
+            pidd_tw(&Graph::from_edges([
+                (0, 1),
+                (0, 2),
+                (0, 3),
+                (1, 2),
+                (1, 3),
+                (2, 3)
+            ])),
+            3
+        ); // K4
         assert_eq!(pidd_tw(&grid3x3()), 3);
         assert_eq!(pidd_tw(&Graph::with_capacity(0)), 0);
         assert_eq!(pidd_tw(&Graph::with_capacity(1)), 0);
@@ -943,15 +963,21 @@ mod tests {
     #[test]
     fn series_reduction_subdivision() {
         // K4 with edge 0-1 subdivided by vertex 4 (path 0-4-1): tw stays 3.
-        let g = Graph::from_edges([
-            (0, 2), (0, 3), (0, 4),
-            (1, 2), (1, 3), (1, 4),
-            (2, 3),
-        ]);
+        let g = Graph::from_edges([(0, 2), (0, 3), (0, 4), (1, 2), (1, 3), (1, 4), (2, 3)]);
         assert_eq!(pidd_tw(&g), 3);
 
         // C6: all degree-2 with non-adjacent neighbours -> series reduces.
-        assert_eq!(pidd_tw(&Graph::from_edges([(0,1),(1,2),(2,3),(3,4),(4,5),(5,0)])), 2);
+        assert_eq!(
+            pidd_tw(&Graph::from_edges([
+                (0, 1),
+                (1, 2),
+                (2, 3),
+                (3, 4),
+                (4, 5),
+                (5, 0)
+            ])),
+            2
+        );
 
         // P3: degree-2 series vertex whose neighbours become adjacent.
         assert_eq!(pidd_tw(&Graph::from_edges([(0, 1), (1, 2)])), 1);
@@ -963,7 +989,10 @@ mod tests {
             for g in all_graphs(n) {
                 let expected = bb(&g).treewidth;
                 let got = pidd_tw(&g);
-                assert_eq!(got, expected, "n={n}: pidd tw {got} != quickbb tw {expected}");
+                assert_eq!(
+                    got, expected,
+                    "n={n}: pidd tw {got} != quickbb tw {expected}"
+                );
             }
         }
     }

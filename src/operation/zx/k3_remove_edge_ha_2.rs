@@ -19,8 +19,8 @@
 //! the phases of a and b are raised by one step (s*pi/4, mode 8).
 
 use crate::operation::{
-    unfuse::unfuse_to_sep_h_edge,
     utils::{get_h_neighbour, get_normal_neighbour, h_connected},
+    zx::unfuse::unfuse_to_sep_h_edge,
 };
 use petgraph::graph::NodeIndex;
 
@@ -90,7 +90,7 @@ pub fn k3_remove_edge_had2_on_vertex(g: &Graph, v: NodeIndex) -> Graph {
 
 /// Apply k3_remove_edge_had2_on_vertex repeatedly until no more applicable
 /// vertices remain.
-pub fn k3_remove_edge_had2(g: &Graph) -> Graph {
+pub fn k3_remove_had2(g: &Graph) -> Graph {
     let mut tmp = g.clone();
     loop {
         match has_valid_k3_vertex_had2(&tmp) {
@@ -271,7 +271,7 @@ mod tests {
         }
         g.add_edge_c(v2, r3, EColor::NC);
 
-        let out = k3_remove_edge_had2(&g);
+        let out = k3_remove_had2(&g);
         // 9 original vertices + u, w, x per site = 15.
         assert_eq!(out.node_count(), 15);
         // Both diagonals are gone and the v's have reset to Z(0).
@@ -293,7 +293,7 @@ mod tests {
         assert_eq!(out.label(NodeIndex::new(14)), VColor::X(7));
 
         // Idempotent: a second fixpoint pass changes nothing.
-        let twice = k3_remove_edge_had2(&out);
+        let twice = k3_remove_had2(&out);
         assert_eq!(out.node_count(), twice.node_count());
         assert_eq!(sorted_colored_edges(&out), sorted_colored_edges(&twice));
     }

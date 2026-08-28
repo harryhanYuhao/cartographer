@@ -1,4 +1,5 @@
-//! K3 edge removal degree 2: a rewrite rule for graph-like ZX-diagrams.
+//! K3 edge removal on degree 2 vertices: a rewrite rule for graph-like ZX-diagrams.
+//! (Implement in function k3_remove)
 //!
 //! The rule targets an alive vertex `v` whose neighbourhood is exactly two
 //! distinct neighbours `a`, `b` such that `v`, `a`, `b` form a triangle (K3)
@@ -83,7 +84,7 @@ pub fn k3_remove_edge_degree2_on_vertex(g: &Graph, v: NodeIndex) -> Graph {
 }
 
 /// Apply K3_remove_edge_degree_2_on_vertex repeatedly until no more applicable vertices remain.
-pub fn k3_remove_edge_degree_2(g: &Graph) -> Graph {
+pub fn k3_remove(g: &Graph) -> Graph {
     let mut tmp = g.clone();
     loop {
         match has_valid_k3_vertex_degree2(&tmp) {
@@ -199,7 +200,7 @@ mod tests {
             g.add_edge_c(NodeIndex::new(p), NodeIndex::new(q), EColor::H);
         }
 
-        let out = k3_remove_edge_degree_2(&g);
+        let out = k3_remove(&g);
         assert_eq!(out.node_count(), 8);
         assert_eq!(
             sorted_colored_edges(&out),
@@ -222,8 +223,8 @@ mod tests {
         let leaf = g.add_vertex_with(VColor::Z(0));
         g.add_edge_c(NodeIndex::new(1), leaf, EColor::H);
 
-        let once = k3_remove_edge_degree_2(&g);
-        let twice = k3_remove_edge_degree_2(&once);
+        let once = k3_remove(&g);
+        let twice = k3_remove(&once);
         assert_eq!(sorted_colored_edges(&once), sorted_colored_edges(&twice));
         assert_eq!(once.node_count(), twice.node_count());
     }

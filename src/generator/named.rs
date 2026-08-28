@@ -14,7 +14,10 @@ use petgraph::graph::NodeIndex;
 /// vertices that are referenced by some edge, so edge-less requests (e.g.
 /// `path(1)`, `complete_binary_tree(0)`) would otherwise come back with zero
 /// vertices.
-pub(crate) fn build_with_n_vertices(n: usize, edges: impl IntoIterator<Item = (usize, usize)>) -> Graph {
+pub(crate) fn build_with_n_vertices(
+    n: usize,
+    edges: impl IntoIterator<Item = (usize, usize)>,
+) -> Graph {
     let mut g = Graph::with_capacity(n);
     for (u, v) in edges {
         if u != v {
