@@ -28,40 +28,45 @@ use crate::graph::{EColor, Graph, VColor};
 /// `Z(0)` (the full phase has moved onto `w`). Everything else, including
 /// the `v`–`N2` H edges, is left unchanged.
 pub fn unfuse_to_sep_h_edge(g: &Graph, v: NodeIndex) -> Graph {
+    let mut out = g.clone();
+    unfuse_to_sep_h_edge_in_place(&mut out, v);
+    out
+}
+
+/// In-place core of [`unfuse_to_sep_h_edge`]: mutates `g` directly instead
+/// of a clone, leaving it untouched when `v` is not an alive Z spider.
+pub(crate) fn unfuse_to_sep_h_edge_in_place(g: &mut Graph, v: NodeIndex) {
     let p = match g.label(v) {
         VColor::Z(p) if g.is_alive(v) => p,
-        _ => return g.clone(),
+        _ => return,
     };
 
     // N1: alive neighbours of v reached through a normal edge. Sorted +
-    // deduped: edges() yields each parallel copy separately.
+    // deduped: edges_at yields each parallel copy separately.
     let mut n1: Vec<NodeIndex> = g
-        .edges()
-        .filter(|&(s, t, e)| g.edge_color(e) == EColor::NC && (s == v) != (t == v))
-        .map(|(s, t, _)| if s == v { t } else { s })
+        .edges_at(v)
+        .filter(|&(_, o, e)| o != v && g.edge_color(e) == EColor::NC)
+        .map(|(_, o, _)| o)
         .collect();
     n1.sort_unstable();
     n1.dedup();
 
-    let mut out = g.clone();
     // u takes over the normal-edge neighbourhood; w carries the old phase.
-    let u = out.add_vertex_with(VColor::Z(0));
-    let w = out.add_vertex_with(VColor::Z(p));
+    let u = g.add_vertex_with(VColor::Z(0));
+    let w = g.add_vertex_with(VColor::Z(p));
     for &n in &n1 {
-        out.add_edge_c(u, n, EColor::NC);
+        g.add_edge_c(u, n, EColor::NC);
     }
-    out.add_edge_c(w, u, EColor::NC);
-    out.add_edge_c(w, v, EColor::NC);
+    g.add_edge_c(w, u, EColor::NC);
+    g.add_edge_c(w, v, EColor::NC);
 
     // Drop every edge between v and N1; v itself loses its phase to w.
     for &n in &n1 {
-        while out.edge_multiplicity(v, n) > 0 {
-            out.remove_edge(v, n);
+        while g.edge_multiplicity(v, n) > 0 {
+            g.remove_edge(v, n);
         }
     }
-    out.set_color(v, VColor::Z(0));
-
-    out
+    g.set_color(v, VColor::Z(0));
 }
 
 #[cfg(test)]

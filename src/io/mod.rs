@@ -6,8 +6,16 @@ use crate::Graph;
 use std::fs::File;
 use std::io::{Error, Write};
 
+/// Append `s` to the end of `filename`. Create file if not exists.
 pub fn append_to_file(s: &str, filename: &str) -> Result<(), Error> {
     let mut file = File::options().append(true).open(filename)?;
+    write!(file, "{s}")?;
+    Ok(())
+}
+
+/// create or replace `filename` with contents `s`.
+pub fn create_or_replace_file(s: &str, filename: &str) -> Result<(), Error> {
+    let mut file = File::create(filename)?;
     write!(file, "{s}")?;
     Ok(())
 }

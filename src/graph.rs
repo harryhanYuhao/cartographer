@@ -187,6 +187,26 @@ impl Graph {
         })
     }
 
+    /// Iterate over the alive edges incident to `v`, as `(v, other, edge
+    /// index)` triples; a self-loop yields `other == v` exactly once. Edges
+    /// touching a dead vertex are skipped, matching [Graph::edges], but only
+    /// `v`'s adjacency lists are walked (O(degree), not a full scan).
+    pub fn edges_at(
+        &self,
+        v: NodeIndex,
+    ) -> impl Iterator<Item = (NodeIndex, NodeIndex, EdgeIndex)> + '_ {
+        let alive = &self.alive;
+        let v_alive = alive.contains(v.index());
+        self.inner.edges(v).filter_map(move |er| {
+            let other = er.target();
+            if v_alive && alive.contains(other.index()) {
+                Some((v, other, er.id()))
+            } else {
+                None
+            }
+        })
+    }
+
     /// The color of edge `e`.
     pub fn edge_color(&self, e: EdgeIndex) -> EColor {
         self.inner.edge_weight(e).copied().expect("edge exists")
@@ -459,6 +479,59 @@ mod tests {
         assert_eq!(g.degree(NodeIndex::new(0)), 1);
         assert_eq!(g.degree(NodeIndex::new(1)), 2);
         assert_eq!(g.degree(NodeIndex::new(3)), 1);
+    }
+
+    #[test]
+    fn edges_at_matches_global_edges_projection() {
+        // 0-1 with mixed parallel copies, a self-loop at 0, an isolated 2,
+        // and 3 joined to 4 but then logically deleted.
+        let mut g = Graph::with_capacity(5);
+        for _ in 0..3 {
+            g.add_vertex();
+        }
+        g.add_edge_c(NodeIndex::new(0), NodeIndex::new(1), EColor::NC);
+        g.add_edge_c(NodeIndex::new(0), NodeIndex::new(1), EColor::H);
+        g.add_edge_c(NodeIndex::new(0), NodeIndex::new(0), EColor::H);
+        g.add_edge_c(NodeIndex::new(1), NodeIndex::new(2), EColor::NC);
+        g.add_edge_c(NodeIndex::new(3), NodeIndex::new(4), EColor::NC);
+        g.remove_vertex(NodeIndex::new(3));
+
+        // For every vertex, edges_at must agree with the projection of the
+        // global edges() iterator onto that vertex (as sorted multisets of
+        // (other, color); edge indices may differ between the two orders).
+        let norm = |o: NodeIndex, c: EColor| (o, matches!(c, EColor::H));
+        let projection = |v: usize| {
+            let v = NodeIndex::new(v);
+            let mut want: Vec<_> = g
+                .edges()
+                .filter(|&(s, t, _)| s == v || t == v)
+                .map(|(s, t, e)| norm(if s == v { t } else { s }, g.edge_color(e)))
+                .collect();
+            want.sort_unstable();
+            want
+        };
+        let at = |v: usize| {
+            let v = NodeIndex::new(v);
+            let mut got: Vec<_> = g
+                .edges_at(v)
+                .map(|(_, o, e)| norm(o, g.edge_color(e)))
+                .collect();
+            got.sort_unstable();
+            got
+        };
+        assert_eq!(
+            at(0),
+            vec![
+                norm(NodeIndex::new(0), EColor::H), // self-loop yields other == v once
+                norm(NodeIndex::new(1), EColor::NC),
+                norm(NodeIndex::new(1), EColor::H),
+            ]
+        );
+        assert_eq!(at(0), projection(0));
+        assert_eq!(at(1), projection(1));
+        assert_eq!(at(2), projection(2));
+        assert_eq!(at(4), Vec::new()); // 4's only edge touched dead 3
+        assert_eq!(at(3), Vec::new()); // dead vertex itself: nothing
     }
 
     #[test]

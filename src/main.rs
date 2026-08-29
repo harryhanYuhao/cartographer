@@ -11,7 +11,7 @@ use rand::{Rng, SeedableRng, rngs::StdRng};
 
 fn main() {
     let mut rng = StdRng::seed_from_u64(412);
-    let q = QCircuit::rand_circuit(3, 10, &mut rng);
+    let q = QCircuit::rand_circuit(3, 12, &mut rng);
 
     let g = q.to_graph();
     // let g = reduce_had_triangle_total(&g);

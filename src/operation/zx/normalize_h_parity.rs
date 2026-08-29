@@ -15,10 +15,8 @@ use crate::graph::{EColor, Graph};
 
 /// Number of H-coloured edges between `a` and `b`.
 fn h_edge_count(g: &Graph, a: NodeIndex, b: NodeIndex) -> usize {
-    g.edges()
-        .filter(|&(s, t, e)| {
-            g.edge_color(e) == EColor::H && ((s == a && t == b) || (s == b && t == a))
-        })
+    g.edges_at(a)
+        .filter(|&(_, o, e)| o == b && g.edge_color(e) == EColor::H)
         .count()
 }
 
@@ -40,8 +38,8 @@ fn normalize_pair(g: &mut Graph, a: NodeIndex, b: NodeIndex) {
         return;
     }
     let (mut nc, mut h) = (0usize, 0usize);
-    for (s, t, e) in g.edges() {
-        if (s == a && t == b) || (s == b && t == a) {
+    for (_, o, e) in g.edges_at(a) {
+        if o == b {
             if g.edge_color(e) == EColor::NC {
                 nc += 1;
             } else {
@@ -88,16 +86,24 @@ fn h_pairs(g: &Graph) -> Vec<(NodeIndex, NodeIndex)> {
 /// returned unchanged.
 pub fn normalize_h_parity_total(g: &Graph) -> Graph {
     let mut out = g.clone();
-    // Self-loops are removed outright, colour and copies alike.
-    for v in g.alive_vertices() {
-        while out.edge_multiplicity(v, v) > 0 {
-            out.remove_edge(v, v);
+    normalize_h_parity_total_in_place(&mut out);
+    out
+}
+
+/// In-place core of [`normalize_h_parity_total`]: mutates `g` directly
+/// instead of a clone.
+pub(crate) fn normalize_h_parity_total_in_place(g: &mut Graph) {
+    // Self-loops are removed outright, colour and copies alike. The vertex
+    // list is snapshotted first: removing edges needs &mut g.
+    let verts: Vec<NodeIndex> = g.alive_vertices().collect();
+    for v in verts {
+        while g.edge_multiplicity(v, v) > 0 {
+            g.remove_edge(v, v);
         }
     }
     for (a, b) in h_pairs(g) {
-        normalize_pair(&mut out, a, b);
+        normalize_pair(g, a, b);
     }
-    out
 }
 
 #[cfg(test)]

@@ -60,37 +60,43 @@ fn has_valid_k3_vertex_degree2(g: &Graph) -> Option<NodeIndex> {
 }
 
 /// Remove an H edge from the first applicable K3 of Z spiders, if any.
-pub fn k3_remove_edge_degree2_on_vertex(g: &Graph, v: NodeIndex) -> Graph {
+// The fixpoint works through the in-place core; this per-vertex entry point
+// is exercised by the test suite.
+#[allow(dead_code)]
+fn k3_remove_edge_degree2_on_vertex(g: &Graph, v: NodeIndex) -> Graph {
+    let mut out = g.clone();
+    k3_remove_edge_degree2_in_place(&mut out, v);
+    out
+}
+
+/// In-place core of `k3_remove_edge_degree2_on_vertex`: mutates `g`
+/// directly, leaving it untouched when `v` is not a valid target.
+fn k3_remove_edge_degree2_in_place(g: &mut Graph, v: NodeIndex) {
     if !valid_k3_vertex_degree2(g, v) {
-        return g.clone();
+        return;
     }
     let nbrs = g.alive_neighbors(v);
     let (a, b) = (nbrs[0], nbrs[1]);
 
-    let mut out = g.clone();
     // Delete the H edge between the neighbours (one parallel copy, per
     // Graph::remove_edge semantics).
-    out.remove_edge(a, b);
+    g.remove_edge(a, b);
     // Neighbours gain one phase step (s*pi/4, wrapping at mode 8).
     for n in [a, b] {
-        if let VColor::Z(s) = out.label(n) {
-            out.set_color(n, VColor::Z((s + 1) % 8));
+        if let VColor::Z(s) = g.label(n) {
+            g.set_color(n, VColor::Z((s + 1) % 8));
         }
     }
     // Attach the fresh X(7) spider to v via a normal edge.
-    let x = out.add_vertex_with(VColor::X(7));
-    out.add_edge_c(v, x, EColor::NC);
-    out
+    let x = g.add_vertex_with(VColor::X(7));
+    g.add_edge_c(v, x, EColor::NC);
 }
 
 /// Apply K3_remove_edge_degree_2_on_vertex repeatedly until no more applicable vertices remain.
 pub fn k3_remove(g: &Graph) -> Graph {
     let mut tmp = g.clone();
-    loop {
-        match has_valid_k3_vertex_degree2(&tmp) {
-            Some(v) => tmp = k3_remove_edge_degree2_on_vertex(&tmp, v),
-            None => break,
-        }
+    while let Some(v) = has_valid_k3_vertex_degree2(&tmp) {
+        k3_remove_edge_degree2_in_place(&mut tmp, v);
     }
     tmp
 }

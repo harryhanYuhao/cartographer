@@ -20,7 +20,7 @@
 
 use crate::operation::{
     utils::{get_h_neighbour, get_normal_neighbour, h_connected},
-    zx::unfuse::unfuse_to_sep_h_edge,
+    zx::unfuse::unfuse_to_sep_h_edge_in_place,
 };
 use petgraph::graph::NodeIndex;
 
@@ -55,48 +55,51 @@ fn has_valid_k3_vertex_had2(g: &Graph) -> Option<NodeIndex> {
 /// Apply the K3 edge removal hadamard 2 rewrite at `v`; if `v` is not a valid
 /// target, return the graph unchanged.
 pub fn k3_remove_edge_had2_on_vertex(g: &Graph, v: NodeIndex) -> Graph {
+    let mut out = g.clone();
+    k3_remove_edge_had2_in_place(&mut out, v);
+    out
+}
+
+/// In-place core of [`k3_remove_edge_had2_on_vertex`]: mutates `g` directly
+/// instead of cloning at every step, leaving it untouched when `v` is not a
+/// valid target.
+pub(crate) fn k3_remove_edge_had2_in_place(g: &mut Graph, v: NodeIndex) {
     // Do nothing if not on valid vertex
     if !valid_k3_vertex_had2(g, v) {
-        return g.clone();
+        return;
     }
-    let mut tmp = g.clone();
-    tmp = unfuse_to_sep_h_edge(&tmp, v);
+    unfuse_to_sep_h_edge_in_place(g, v);
 
-    let h_nbrs = get_h_neighbour(&tmp, v);
+    let h_nbrs = get_h_neighbour(g, v);
     assert_eq!(h_nbrs.len(), 2);
     let (a, b) = (h_nbrs[0], h_nbrs[1]);
 
-    let normal_nbrs = get_normal_neighbour(&tmp, v);
+    let normal_nbrs = get_normal_neighbour(g, v);
     assert_eq!(normal_nbrs.len(), 1);
     let w = normal_nbrs[0];
 
-    let mut out = tmp.clone();
     // Delete the H edge between the neighbours (one parallel copy, per
     // Graph::remove_edge semantics).
-    out.remove_edge(a, b);
+    g.remove_edge(a, b);
     // Neighbours gain one phase step (s*pi/4, wrapping at mode 8).
     for n in [a, b] {
-        if let VColor::Z(s) = out.label(n) {
-            out.set_color(n, VColor::Z((s + 1) % 8));
+        if let VColor::Z(s) = g.label(n) {
+            g.set_color(n, VColor::Z((s + 1) % 8));
         }
     }
-    out.remove_edge(w, v);
+    g.remove_edge(w, v);
     // Attach the fresh X(7) spider to v via a normal edge.
-    let x = out.add_vertex_with(VColor::X(7));
-    out.add_edge_c(v, x, EColor::NC);
-    out.add_edge_c(w, x, EColor::NC);
-    out
+    let x = g.add_vertex_with(VColor::X(7));
+    g.add_edge_c(v, x, EColor::NC);
+    g.add_edge_c(w, x, EColor::NC);
 }
 
 /// Apply k3_remove_edge_had2_on_vertex repeatedly until no more applicable
 /// vertices remain.
 pub fn k3_remove_had2(g: &Graph) -> Graph {
     let mut tmp = g.clone();
-    loop {
-        match has_valid_k3_vertex_had2(&tmp) {
-            Some(v) => tmp = k3_remove_edge_had2_on_vertex(&tmp, v),
-            None => break,
-        }
+    while let Some(v) = has_valid_k3_vertex_had2(&tmp) {
+        k3_remove_edge_had2_in_place(&mut tmp, v);
     }
     tmp
 }

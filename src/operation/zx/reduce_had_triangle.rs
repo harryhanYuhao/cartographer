@@ -43,14 +43,18 @@
 //!   normalization, and the diagonal's last edge is dropped by
 //!   `k3_remove_edge_had2_on_vertex`'s `remove_edge`, which picks an
 //!   arbitrary copy of the pair.
+//! - The rewrites run in place on a single clone of the input (see the
+//!   `*_in_place` cores); the input graph itself is never mutated.
 
-use petgraph::graph::NodeIndex;
+use petgraph::graph::{EdgeIndex, NodeIndex};
 
 use crate::graph::{EColor, Graph, VColor};
 use crate::operation::utils::get_h_neighbour;
-use crate::operation::zx::fuse::fuse_total;
-use crate::operation::zx::k3_remove_edge_ha_2::k3_remove_edge_had2_on_vertex;
-use crate::operation::zx::normalize_h_parity::{normalize_h_parity_total, odd_h_connected};
+use crate::operation::zx::fuse::fuse_total_in_place;
+use crate::operation::zx::k3_remove_edge_ha_2::k3_remove_edge_had2_in_place;
+use crate::operation::zx::normalize_h_parity::{
+    normalize_h_parity_total_in_place, odd_h_connected,
+};
 
 /// The first ascending pair `(v2, v3)` of `v1`'s H neighbours that closes an
 /// all-Z triangle whose three sides each carry an odd number of H edges.
@@ -81,52 +85,64 @@ fn has_valid_reduce_vertex(g: &Graph) -> Option<NodeIndex> {
 
 /// Reduce the Hadamard triangle at `v1` (see the module docs): normalize
 /// H-edge parity on the whole graph, split `v1`'s neighbourhood off onto a
-/// fresh `Z(s)` spider, then apply [`k3_remove_edge_had2_on_vertex`] to
+/// fresh `Z(s)` spider, then apply [`k3_remove_edge_had2_in_place`] to
 /// remove the diagonal `v2 -- v3`. An invalid `v1` returns the graph
 /// unchanged (without normalizing).
-pub fn reduce_had_triangle_on_vertex(g: &Graph, v1: NodeIndex) -> Graph {
+// The fixpoint works through the in-place core; this per-vertex entry point
+// is exercised by the test suite.
+#[allow(dead_code)]
+fn reduce_had_triangle_on_vertex(g: &Graph, v1: NodeIndex) -> Graph {
+    let mut out = g.clone();
+    reduce_had_triangle_on_vertex_in_place(&mut out, v1);
+    out
+}
+
+/// In-place core of `reduce_had_triangle_on_vertex`: mutates `g` directly,
+/// leaving it untouched when `v1` is not a valid target.
+fn reduce_had_triangle_on_vertex_in_place(g: &mut Graph, v1: NodeIndex) {
     let (s, v2, v3) = match (g.label(v1), find_h_triangle(g, v1)) {
         (VColor::Z(s), Some((v2, v3))) if g.is_alive(v1) => (s, v2, v3),
-        _ => return g.clone(),
+        _ => return,
     };
 
     // Normalize H-edge parity everywhere first: every H-connected pair
     // collapses to a single copy (odd) or vanishes (even).
-    let norm = normalize_h_parity_total(g);
+    normalize_h_parity_total_in_place(g);
 
     // N1: every neighbour of v1 other than v2, v3 (any edge colour), in the
     // normalized graph — even-H neighbours are gone by now.
-    let n1: Vec<NodeIndex> = norm
+    let n1: Vec<NodeIndex> = g
         .alive_neighbors(v1)
         .into_iter()
         .filter(|&n| n != v2 && n != v3)
         .collect();
 
     // w takes over the N1 edges: every parallel copy, with its colour.
-    let mut out = norm;
-    let moved: Vec<(NodeIndex, EColor)> = out
-        .edges()
-        .filter(|&(a, b, _)| (a == v1) != (b == v1))
-        .map(|(a, b, e)| (if a == v1 { b } else { a }, out.edge_color(e)))
-        .filter(|&(other, _)| other != v2 && other != v3)
+    // Snapshotted and sorted by edge index so they are re-attached in the
+    // same order a full scan of the graph would visit them.
+    let mut moved: Vec<(NodeIndex, EColor, EdgeIndex)> = g
+        .edges_at(v1)
+        .filter(|&(_, o, _)| o != v1 && o != v2 && o != v3)
+        .map(|(_, o, e)| (o, g.edge_color(e), e))
         .collect();
-    let w = out.add_vertex_with(VColor::Z(s));
-    for (other, c) in moved {
-        out.add_edge_c(w, other, c);
+    moved.sort_unstable_by_key(|&(_, _, e)| e);
+    let w = g.add_vertex_with(VColor::Z(s));
+    for (other, c, _) in moved {
+        g.add_edge_c(w, other, c);
     }
     // Delete every v1-N1 edge, bridge v1 to w by a normal edge, and move the
     // phase onto w.
     for &n in &n1 {
-        while out.edge_multiplicity(v1, n) > 0 {
-            out.remove_edge(v1, n);
+        while g.edge_multiplicity(v1, n) > 0 {
+            g.remove_edge(v1, n);
         }
     }
-    out.add_edge_c(v1, w, EColor::NC);
-    out.set_color(v1, VColor::Z(0));
+    g.add_edge_c(v1, w, EColor::NC);
+    g.set_color(v1, VColor::Z(0));
 
     // v1 is now a valid had2 site: its H neighbourhood is exactly {v2, v3}
     // and the normalized diagonal is a single H edge.
-    k3_remove_edge_had2_on_vertex(&out, v1)
+    k3_remove_edge_had2_in_place(g, v1);
 }
 
 /// Apply reduce_had_triangle_on_vertex repeatedly until no all-Z H triangle
@@ -137,10 +153,10 @@ pub fn reduce_had_triangle_on_vertex(g: &Graph, v1: NodeIndex) -> Graph {
 /// vertices, and no H edges are ever added, so the loop terminates.
 pub fn reduce_had_triangle_total(g: &Graph) -> Graph {
     let mut tmp = g.clone();
-    tmp = fuse_total(&tmp);
+    fuse_total_in_place(&mut tmp);
     while let Some(v) = has_valid_reduce_vertex(&tmp) {
-        tmp = reduce_had_triangle_on_vertex(&tmp, v);
-        tmp = fuse_total(&tmp);
+        reduce_had_triangle_on_vertex_in_place(&mut tmp, v);
+        fuse_total_in_place(&mut tmp);
     }
     tmp
 }

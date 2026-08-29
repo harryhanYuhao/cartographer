@@ -17,13 +17,15 @@
 //!   never leaves a self-loop on the fused spider.
 //! - `fuse_total` normalizes H-edge parity (see [`normalize_h_parity_total`])
 //!   before the first fusion and after every one.
+//! - The rewrites run in place on a single clone of the input (see the
+//!   `*_in_place` cores); the input graph itself is never mutated.
 
-use petgraph::graph::NodeIndex;
+use petgraph::graph::{EdgeIndex, NodeIndex};
 
-use crate::graph::{Graph, VColor};
+use crate::graph::{EColor, Graph, VColor};
 use crate::operation::{
     utils::{get_normal_neighbour, nc_connected},
-    zx::normalize_h_parity::normalize_h_parity_total,
+    zx::normalize_h_parity::normalize_h_parity_total_in_place,
 };
 
 /// A valid fuse pair: two distinct alive spiders of the same colour (both Z
@@ -61,36 +63,43 @@ fn has_valid_fuse(g: &Graph) -> Option<(NodeIndex, NodeIndex)> {
 /// single spider `Z((s+t) mod 8)` (or `X((s+t) mod 8)`) living at `v1`;
 /// invalid pairs return the graph unchanged.
 pub fn fuse_vertices(g: &Graph, v1: NodeIndex, v2: NodeIndex) -> Graph {
+    let mut out = g.clone();
+    fuse_vertices_in_place(&mut out, v1, v2);
+    out
+}
+
+/// In-place core of [`fuse_vertices`]: mutates `g` directly, leaving it
+/// untouched when `(v1, v2)` is not a valid fuse pair.
+pub(crate) fn fuse_vertices_in_place(g: &mut Graph, v1: NodeIndex, v2: NodeIndex) {
     if !valid_fuse_vertices(g, v1, v2) {
-        return g.clone();
+        return;
     }
     let merged = match (g.label(v1), g.label(v2)) {
         (VColor::Z(s), VColor::Z(t)) => VColor::Z((s + t) % 8),
         (VColor::X(s), VColor::X(t)) => VColor::X((s + t) % 8),
         // Unreachable: valid_fuse_vertices checked the colours.
-        _ => return g.clone(),
+        _ => return,
     };
 
-    let mut out = g.clone();
-    for (s, t, e) in g.edges() {
-        if s != v2 && t != v2 {
-            continue; // edge not at v2: untouched
-        }
-        // The endpoint that is not v2; a v2 self-loop has both.
-        let other = if s == v2 { t } else { s };
-        // Pair edges (normal or H) and v2 self-loops are canceled; every
-        // other edge moves onto the fused spider with its colour.
-        if other != v2 && other != v1 {
-            out.add_edge_c(v1, other, g.edge_color(e));
-        }
+    // Edges at v2 to move onto the fused spider, snapshotted and sorted by
+    // edge index so they are re-attached in the same order a full scan of
+    // the graph would visit them. Pair edges (normal or H) and v2
+    // self-loops are canceled by the fusion instead of moved.
+    let mut moved: Vec<(NodeIndex, EColor, EdgeIndex)> = g
+        .edges_at(v2)
+        .filter(|&(_, o, _)| o != v2 && o != v1)
+        .map(|(_, o, e)| (o, g.edge_color(e), e))
+        .collect();
+    moved.sort_unstable_by_key(|&(_, _, e)| e);
+    for (other, c, _) in moved {
+        g.add_edge_c(v1, other, c);
     }
     // Cancel every edge of the pair (normal or H), then retire v2.
-    while out.edge_multiplicity(v1, v2) > 0 {
-        out.remove_edge(v1, v2);
+    while g.edge_multiplicity(v1, v2) > 0 {
+        g.remove_edge(v1, v2);
     }
-    out.remove_vertex(v2);
-    out.set_color(v1, merged);
-    out
+    g.remove_vertex(v2);
+    g.set_color(v1, merged);
 }
 
 /// Apply fuse_vertices repeatedly until no valid pair remains, normalizing
@@ -98,12 +107,17 @@ pub fn fuse_vertices(g: &Graph, v1: NodeIndex, v2: NodeIndex) -> Graph {
 /// after every one.
 pub fn fuse_total(g: &Graph) -> Graph {
     let mut tmp = g.clone();
-    tmp = normalize_h_parity_total(&tmp);
-    while let Some((v1, v2)) = has_valid_fuse(&tmp) {
-        tmp = fuse_vertices(&tmp, v1, v2);
-        tmp = normalize_h_parity_total(&tmp);
-    }
+    fuse_total_in_place(&mut tmp);
     tmp
+}
+
+/// In-place core of [`fuse_total`]: runs the whole fixpoint on `g` directly.
+pub(crate) fn fuse_total_in_place(g: &mut Graph) {
+    normalize_h_parity_total_in_place(g);
+    while let Some((v1, v2)) = has_valid_fuse(g) {
+        fuse_vertices_in_place(g, v1, v2);
+        normalize_h_parity_total_in_place(g);
+    }
 }
 
 #[cfg(test)]
