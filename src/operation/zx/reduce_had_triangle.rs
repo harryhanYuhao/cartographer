@@ -130,8 +130,11 @@ pub fn reduce_had_triangle_on_vertex(g: &Graph, v1: NodeIndex) -> Graph {
 }
 
 /// Apply reduce_had_triangle_on_vertex repeatedly until no all-Z H triangle
-/// remains. Terminates: every application deletes an entire (odd) diagonal
-/// and no H edges are ever added.
+/// remains, running [`fuse_total`] (H-parity normalization + NC fusion)
+/// before the first application and after every one; each fresh
+/// `w == u == w'` chain collapses back into a single Z(s) spider. Every
+/// application deletes an entire (odd) diagonal, fusions only remove
+/// vertices, and no H edges are ever added, so the loop terminates.
 pub fn reduce_had_triangle_total(g: &Graph) -> Graph {
     let mut tmp = g.clone();
     tmp = fuse_total(&tmp);
@@ -304,7 +307,9 @@ mod tests {
     #[test]
     fn even_h_edges_do_not_form_a_triangle() {
         // Two H copies on the diagonal (even == no edge): no triangle, at any
-        // corner. Same for an even side.
+        // corner, so no rewrite fires. The fixpoint still normalizes H parity
+        // (its fuse_total pass starts with one): the even pair itself
+        // vanishes from the total's output.
         let mut even_diagonal = h_triangle(0);
         even_diagonal.add_edge_c(NodeIndex::new(1), NodeIndex::new(2), EColor::H);
         let mut even_side = h_triangle(0);
@@ -320,9 +325,15 @@ mod tests {
                     "target {target}"
                 );
             }
-            let total = reduce_had_triangle_total(g);
-            assert_eq!(sorted_colored_edges(&total), sorted_colored_edges(g));
         }
+        assert_eq!(
+            sorted_colored_edges(&reduce_had_triangle_total(&even_diagonal)),
+            vec![(0, 1, EColor::H), (0, 2, EColor::H)]
+        );
+        assert_eq!(
+            sorted_colored_edges(&reduce_had_triangle_total(&even_side)),
+            vec![(0, 2, EColor::H), (1, 2, EColor::H)]
+        );
     }
 
     #[test]
@@ -454,9 +465,10 @@ mod tests {
     }
 
     #[test]
-    fn fixpoint_rewrites_every_triangle_and_is_idempotent() {
-        // Two disjoint triangles: the fixpoint must consume both diagonals,
-        // appending one w,u,w',x chain per site.
+    fn fixpoint_rewrites_fuses_and_is_idempotent() {
+        // Two disjoint triangles: the fixpoint consumes both diagonals and,
+        // since it interleaves fuse_total, collapses each fresh w == u == w'
+        // chain back into the single w carrying v's phase.
         let mut g = h_triangle(1); // nodes 0..=2, v = Z(1)
         let v2 = g.add_vertex_with(VColor::Z(2));
         let a2 = g.add_vertex_with(VColor::Z(0));
@@ -466,8 +478,14 @@ mod tests {
         }
 
         let out = reduce_had_triangle_total(&g);
-        // 6 original vertices + 4 per site.
+        // 6 original vertices + 4 per site; the fused-away chain links
+        // (7, 8, 11, 12) are logically dead.
         assert_eq!(out.node_count(), 14);
+        assert_eq!(out.alive_count(), 10);
+        for dead in [7usize, 8, 11, 12] {
+            assert!(!out.is_alive(NodeIndex::new(dead)));
+        }
+        // Both diagonals are gone; each chain collapsed to w == x.
         assert_eq!(
             sorted_colored_edges(&out),
             vec![
@@ -477,16 +495,12 @@ mod tests {
                 (3, 4, EColor::H),
                 (3, 5, EColor::H),
                 (3, 13, EColor::NC),
-                (6, 7, EColor::NC),
-                (7, 8, EColor::NC),
-                (8, 9, EColor::NC),
-                (10, 11, EColor::NC),
-                (11, 12, EColor::NC),
-                (12, 13, EColor::NC),
+                (6, 9, EColor::NC),
+                (10, 13, EColor::NC),
             ]
         );
-        // Both diagonals are gone, phases bumped once per site, w's carry the
-        // original v phases (1 and 2).
+        // Phases bumped once per site, v's reset to Z(0), the fused w's
+        // carry the original v phases (1 and 2), the x's are X(7).
         assert_eq!(
             out.edge_multiplicity(NodeIndex::new(1), NodeIndex::new(2)),
             0
@@ -495,7 +509,10 @@ mod tests {
             out.edge_multiplicity(NodeIndex::new(4), NodeIndex::new(5)),
             0
         );
+        assert_eq!(out.label(NodeIndex::new(0)), VColor::Z(0));
+        assert_eq!(out.label(NodeIndex::new(3)), VColor::Z(0));
         assert_eq!(out.label(NodeIndex::new(1)), VColor::Z(1));
+        assert_eq!(out.label(NodeIndex::new(2)), VColor::Z(1));
         assert_eq!(out.label(NodeIndex::new(4)), VColor::Z(1));
         assert_eq!(out.label(NodeIndex::new(5)), VColor::Z(2));
         assert_eq!(out.label(NodeIndex::new(6)), VColor::Z(1));
@@ -503,9 +520,10 @@ mod tests {
         assert_eq!(out.label(NodeIndex::new(9)), VColor::X(7));
         assert_eq!(out.label(NodeIndex::new(13)), VColor::X(7));
 
-        // Idempotent: no all-Z H triangle remains.
+        // Idempotent: no all-Z H triangle remains and nothing left to fuse.
         let twice = reduce_had_triangle_total(&out);
         assert_eq!(out.node_count(), twice.node_count());
+        assert_eq!(out.alive_count(), twice.alive_count());
         assert_eq!(sorted_colored_edges(&out), sorted_colored_edges(&twice));
     }
 }

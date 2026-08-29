@@ -410,6 +410,14 @@ impl Graph {
     pub fn from_graph3_file(path: impl AsRef<Path>) -> Result<Self, String> {
         crate::io::graph3::from_graph3_file(path)
     }
+
+    pub fn info(&self) -> String {
+        format!(
+            "Graph with {} vertices and {} edges",
+            self.node_count(),
+            self.edge_count()
+        )
+    }
 }
 
 impl Default for Graph {

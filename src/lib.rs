@@ -50,6 +50,9 @@ pub mod graph;
 pub mod io;
 pub mod operation;
 
+pub mod q_circuit;
+
+mod benchmark;
 mod cli;
 
 pub use graph::{EColor, Graph, VColor};

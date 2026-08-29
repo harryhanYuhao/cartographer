@@ -15,6 +15,7 @@
 //! seeded RNG for reproducible tests.
 
 pub mod named;
+pub mod q_circuit;
 pub mod random;
 pub mod small;
 pub mod zx;

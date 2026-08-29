@@ -10,14 +10,15 @@ use cartographer::{
 use rand::{Rng, SeedableRng, rngs::StdRng};
 
 fn main() {
-    let mut rng = StdRng::seed_from_u64(412);
-    let q = QCircuit::rand_circuit(3, 10, &mut rng);
+    let mut rng = StdRng::seed_from_u64(112);
+    let q = QCircuit::rand_circuit(20, 100, &mut rng);
 
+    let filename = "test/qasm/qcircuit.qasm";
+
+    q.to_qasm2_file(filename).unwrap();
     let g = q.to_graph();
     // let g = reduce_had_triangle_total(&g);
 
-    println!("TW:{}", pidd_tw(&g));
-
-    let filename = "graphs/qcircuit.graph3";
-    export_graph3(&g, &filename).expect("Failed to export graph");
+    println!("{}", g.info());
+    println!("TW: {}", pidd_tw(&g));
 }

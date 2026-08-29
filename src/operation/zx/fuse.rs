@@ -15,6 +15,8 @@
 //!   with its original colour. All edges between `v_1` and `v_2` (normal or
 //!   H) and all self-loops at `v_2` are canceled by the fusion: the merge
 //!   never leaves a self-loop on the fused spider.
+//! - `fuse_total` normalizes H-edge parity (see [`normalize_h_parity_total`])
+//!   before the first fusion and after every one.
 
 use petgraph::graph::NodeIndex;
 
@@ -91,7 +93,9 @@ pub fn fuse_vertices(g: &Graph, v1: NodeIndex, v2: NodeIndex) -> Graph {
     out
 }
 
-/// Apply fuse_vertices repeatedly until no valid pair remains.
+/// Apply fuse_vertices repeatedly until no valid pair remains, normalizing
+/// H-edge parity ([`normalize_h_parity_total`]) before the first fusion and
+/// after every one.
 pub fn fuse_total(g: &Graph) -> Graph {
     let mut tmp = g.clone();
     tmp = normalize_h_parity_total(&tmp);

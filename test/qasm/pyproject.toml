@@ -1,0 +1,20 @@
+[project]
+name = "qasm"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "harryhanYuhao", email = "116114033+harryhanYuhao@users.noreply.github.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "numpy>=2.5.2",
+    "qiskit>=2.5.2",
+]
+
+[project.scripts]
+qasm = "qasm:main"
+
+[build-system]
+requires = ["uv_build>=0.12.5,<0.13.0"]
+build-backend = "uv_build"
