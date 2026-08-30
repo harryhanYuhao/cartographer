@@ -27,13 +27,33 @@ fn benchmark(n: usize, e: usize, iterations: usize, seed: u64) -> String {
         let tw_b = pidd_tw(&line_g);
         let node_before = line_g.node_count();
 
-        let g = reduce_had_triangle_total(&g);
+        let f = reduce_had_triangle_total(&g);
 
-        let line_g = line_graph(&g);
-        let tw_a = pidd_tw(&line_g);
-        let node_after = line_g.node_count();
+        let line_f = line_graph(&f);
+        let tw_a = pidd_tw(&line_f);
+        let node_after = line_f.node_count();
 
         ret += &format!("{}, {}, {}, {}\n", node_before, node_after, tw_b, tw_a);
+
+        let diff = tw_b - tw_a;
+        if diff > 5 {
+            let path = "tw_line_g/graph3/";
+            let id = &format!("{}-{}-{}--decrease{}", n, e, seed, diff);
+            g.to_graph3_file(&format!("{}{}_g.graph3", path, id))
+                .unwrap();
+            line_g
+                .to_graph3_file(&format!("{}{}_g_line_tw_{}.graph3", path, id, tw_b))
+                .unwrap();
+            f.to_graph3_file(&format!("{}{}_f.graph3", path, id))
+                .unwrap();
+            line_f
+                .to_graph3_file(&format!("{}{}_f_line_tw_{}.graph3", path, id, tw_a))
+                .unwrap();
+
+            println!(
+                "Example of Large Decrease: n={n}, e={e}, seed={seed}, tw_b={tw_b}, tw_a={tw_a} Wrtten to {path}"
+            );
+        }
 
         // Cool down after each intense burst (one graph) so a multi-hour
         // run leaves the machine responsive.
@@ -103,12 +123,12 @@ fn main() {
         .unwrap();
     let seed = time.as_secs() as u64;
     let inner_iter = 1;
-    let mut outer_iter = 10;
+    let mut outer_iter = 20;
 
     // One dispatcher thread per vertex count.
     let mut threads = vec![];
 
-    for i in 10..15 {
+    for i in 12..17 {
         if i % 4 == 0 {
             outer_iter -= 4
         }
