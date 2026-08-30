@@ -1,12 +1,15 @@
 use cartographer::io::{append_to_file, create_or_replace_file};
 use cartographer::{
-    algorithm::pidd_tw, generator::zx::rand_graph_like_zx, operation::reduce_had_triangle_total,
+    algorithm::pidd_tw,
+    generator::zx::rand_graph_like_zx,
+    operation::{line_graph, reduce_had_triangle_total},
 };
 use rand::prelude::*;
+use std::fs;
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
-const CSV_HEADER: &str = "nodes, edges, tw_before, tw_after\n";
+const CSV_HEADER: &str = "nodes before, nodes after, tw_before, tw_after\n";
 
 /// Cooldown between graphs, in milliseconds. Long runs (hours) otherwise pin
 /// every core at 100%; set to 0 to disable.
@@ -19,12 +22,18 @@ fn benchmark(n: usize, e: usize, iterations: usize, seed: u64) -> String {
     let mut ret = String::new();
     for _ in 0..iterations {
         let g = rand_graph_like_zx(n, e, &mut rng);
-        let tw_b = pidd_tw(&g);
+
+        let line_g = line_graph(&g);
+        let tw_b = pidd_tw(&line_g);
+        let node_before = line_g.node_count();
 
         let g = reduce_had_triangle_total(&g);
-        let tw_a = pidd_tw(&g);
 
-        ret += &format!("{}, {}, {}, {}\n", n, e, tw_b, tw_a);
+        let line_g = line_graph(&g);
+        let tw_a = pidd_tw(&line_g);
+        let node_after = line_g.node_count();
+
+        ret += &format!("{}, {}, {}, {}\n", node_before, node_after, tw_b, tw_a);
 
         // Cool down after each intense burst (one graph) so a multi-hour
         // run leaves the machine responsive.
@@ -38,23 +47,23 @@ fn benchmark(n: usize, e: usize, iterations: usize, seed: u64) -> String {
 fn dispatcher(n: usize, seed: u64, inner_iter: usize, outer_iter: usize) {
     let mut rng = StdRng::seed_from_u64(seed);
 
-    let filename = format!("tw_{}_vertex.csv", n);
+    let filename = format!("tw_line_g/tw_{}_vertex_line.csv", n);
 
     println!("[n={n}] starting: {outer_iter} samples x {inner_iter} graphs each");
 
-    create_or_replace_file(CSV_HEADER, &filename).unwrap();
+    match fs::metadata(&filename) {
+        Ok(_) => {}
+        Err(_) => {
+            create_or_replace_file(CSV_HEADER, &filename).unwrap();
+        }
+    }
+
     let total_edges = n * (n - 1) / 2;
     let mut lower_bound = total_edges / 10;
     if lower_bound < 1 {
         lower_bound = 1;
     }
-    let mut upper_bound = (total_edges as f64 * 0.9) as usize;
-
-    if n > 20 {
-        upper_bound /= 6;
-    } else if n > 15 {
-        upper_bound /= 2;
-    }
+    let upper_bound = (total_edges as f64 * 0.95) as usize;
 
     let numbers: Vec<i32> = (lower_bound as i32..upper_bound as i32).collect();
 
@@ -89,16 +98,19 @@ fn dispatcher(n: usize, seed: u64, inner_iter: usize, outer_iter: usize) {
 }
 
 fn main() {
-    let seed = 194131;
-    let inner_iter = 3;
-    let mut outer_iter = 35;
+    let time = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap();
+    let seed = time.as_secs() as u64;
+    let inner_iter = 1;
+    let mut outer_iter = 10;
 
     // One dispatcher thread per vertex count.
     let mut threads = vec![];
 
-    for i in 5..30 {
+    for i in 10..15 {
         if i % 4 == 0 {
-            outer_iter -= 5
+            outer_iter -= 4
         }
         threads.push(thread::spawn(move || {
             dispatcher(i, seed, inner_iter, outer_iter);

@@ -1,7 +1,9 @@
+mod line_graph;
 pub mod zx;
 
 mod utils;
 
+pub use line_graph::line_graph;
 pub use zx::fuse::fuse_total;
 pub use zx::k3_remove_edge_ha_2::k3_remove_had2;
 pub use zx::normalize_h_parity::normalize_h_parity_total;
